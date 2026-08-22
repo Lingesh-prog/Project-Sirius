@@ -1,0 +1,16 @@
+# Python
+__pycache__/
+*.py[cod]
+
+# Virtual environment
+venv/
+.venv/
+
+# Sirius database
+data/*.db
+
+# Environment variables
+.env
+
+# VS Code
+.vscode/
