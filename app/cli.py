@@ -1,28 +1,11 @@
-from database import initialize_database
-from task_manager import add_task, get_tasks, complete_task, delete_task
+"""Terminal interface for the Sirius Focus task tool."""
+
+from app.core.assistant import format_tasks, handle_command
+from app.tools.tasks.service import add_task, complete_task, delete_task, get_tasks
 
 
 def display_tasks():
-    tasks = get_tasks()
-
-    if not tasks:
-        print("\nNo tasks found.")
-        return
-
-    print("\n========== YOUR TASKS ==========")
-
-    for task in tasks:
-        task_id, title, description, due_date, priority, status, created_at = task
-
-        print(f"\n[{task_id}] {title}")
-        print(f"    Priority : {priority}")
-        print(f"    Status   : {status}")
-        print(f"    Due      : {due_date or 'No deadline'}")
-
-        if description:
-            print(f"    Details  : {description}")
-
-    print("\n================================")
+    print(f"\n{format_tasks(get_tasks())}")
 
 
 def create_task():
@@ -47,7 +30,7 @@ def create_task():
     priorities = {
         "1": "Low",
         "2": "Medium",
-        "3": "High"
+        "3": "High",
     }
 
     priority = priorities.get(priority_choice, "Medium")
@@ -56,10 +39,10 @@ def create_task():
         title=title,
         description=description,
         due_date=due_date or None,
-        priority=priority
+        priority=priority,
     )
 
-    print(f"\n✅ Task created successfully! ID: {task_id}")
+    print(f"\nTask created successfully! ID: {task_id}")
 
 
 def complete_existing_task():
@@ -70,11 +53,12 @@ def complete_existing_task():
     except ValueError:
         print("Please enter a valid task ID.")
         return
+        return
 
     if complete_task(task_id):
-        print("✅ Task completed!")
+        print("Task completed!")
     else:
-        print("❌ Task not found.")
+        print("Task not found.")
 
 
 def delete_existing_task():
@@ -84,20 +68,19 @@ def delete_existing_task():
         task_id = int(input("\nEnter task ID to delete: "))
     except ValueError:
         print("Please enter a valid task ID.")
-        return
 
     if delete_task(task_id):
-        print("🗑️ Task deleted.")
+        print("Task deleted.")
     else:
-        print("❌ Task not found.")
+        print("Task not found.")
 
 
 def show_menu():
     print("""
-╔══════════════════════════════════╗
-║         PROJECT SIRIUS           ║
-║          SIRIUS FOCUS            ║
-╚══════════════════════════════════╝
++--------------------------------+
+|         PROJECT SIRIUS         |
+|          SIRIUS FOCUS          |
++--------------------------------+
 
 1. Add Task
 2. View Tasks
@@ -107,37 +90,27 @@ def show_menu():
 """)
 
 
-def main():
-    initialize_database()
-
+def run():
+    """Run the Sirius Focus terminal menu."""
     print("\nSirius Focus v0.1 initialized.")
     print("Your personal task assistant is ready.")
 
     while True:
         show_menu()
 
-        choice = input("Choose an option: ").strip()
+        choice = input("Choose an option or enter a task command: ").strip()
 
         if choice == "1":
             create_task()
-
         elif choice == "2":
             display_tasks()
-
         elif choice == "3":
             complete_existing_task()
-
         elif choice == "4":
             delete_existing_task()
-
         elif choice == "5":
             print("\nSirius shutting down...")
-            print("Goodbye. 👋")
+            print("Goodbye.")
             break
-
         else:
-            print("\n❌ Invalid option. Please choose 1-5.")
-
-
-if __name__ == "__main__":
-    main()
+            print(f"\n{handle_command(choice)}")
