@@ -62,3 +62,39 @@ def delete_reminder_by_id(reminder_id, database_path=None):
         return cursor.rowcount > 0
     finally:
         connection.close()
+
+
+def fetch_pending_reminders(database_path=None):
+    """Return reminders still pending, ordered by their reminder time."""
+    connection = get_connection(database_path)
+
+    try:
+        cursor = connection.execute("""
+            SELECT id, text, remind_at, status, created_at
+            FROM reminders
+            WHERE status = 'Pending'
+            ORDER BY remind_at ASC, id ASC
+        """)
+        return cursor.fetchall()
+    finally:
+        connection.close()
+
+
+def complete_pending_reminder(reminder_id, database_path=None):
+    """Complete a reminder only while it is still pending.
+
+    Returns True only for the single Pending -> Completed transition so
+    concurrent callers can never claim the same reminder twice.
+    """
+    connection = get_connection(database_path)
+
+    try:
+        cursor = connection.execute("""
+            UPDATE reminders
+            SET status = 'Completed'
+            WHERE id = ? AND status = 'Pending'
+        """, (reminder_id,))
+        connection.commit()
+        return cursor.rowcount > 0
+    finally:
+        connection.close()

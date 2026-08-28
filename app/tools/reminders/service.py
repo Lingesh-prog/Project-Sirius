@@ -55,3 +55,34 @@ def _validate_remind_at(remind_at):
         datetime.fromisoformat(remind_at)
     except ValueError as error:
         raise ValueError("remind_at must be a valid ISO datetime.") from error
+
+
+def get_due_reminders(now=None, database_path=None):
+    """Return pending reminders whose reminder time has arrived.
+
+    *now* defaults to the current time. Reminder times are compared as
+    parsed datetimes, and reminders with unparsable times are skipped so
+    one bad row cannot halt scheduling.
+    """
+    moment = now if now is not None else datetime.now()
+
+    due_reminders = []
+    for reminder in repository.fetch_pending_reminders(database_path=database_path):
+        try:
+            remind_at = datetime.fromisoformat(reminder[2])
+        except (TypeError, ValueError):
+            continue
+
+        if remind_at <= moment:
+            due_reminders.append(reminder)
+
+    return due_reminders
+
+
+def complete_pending_reminder(reminder_id, database_path=None):
+    """Claim a pending reminder for completion before it is triggered.
+
+    Returns True only for the single Pending -> Completed transition so a
+    reminder can never be triggered twice.
+    """
+    return repository.complete_pending_reminder(reminder_id, database_path=database_path)
