@@ -13,6 +13,7 @@ from app.ai import AIClient, AIConfigurationError, AIProviderError
 from app.core.assistant import UNKNOWN_COMMAND_MESSAGE, handle_command
 from app.core.conversation import ConversationContext
 from app.storage.database import initialize_database
+from app.tools.memory import service as memory_service
 from app.tools.reminders import service as reminder_service
 from app.tools.tasks import service
 
@@ -450,3 +451,86 @@ class AIAssistantTests(unittest.TestCase):
         self.assertEqual(
             self.command("rename task 42 to Ghost", ai_client=client), "Task not found."
         )
+
+    def test_natural_language_saves_a_memory(self):
+        client = self.fake_client(
+            tool_reply("memory.save", {"key": "wifi password", "value": "secret123"})
+        )
+
+        response = self.command(
+            "remember that my wifi password is secret123", ai_client=client
+        )
+
+        self.assertEqual(response, "Memory saved with ID: 1.")
+        memory = memory_service.list_memories(self.database_path)[0]
+        self.assertEqual(memory[1], "wifi password")
+        self.assertEqual(memory[2], "secret123")
+
+    def test_natural_language_lists_memories(self):
+        memory_service.save_memory("wifi password", "secret123", self.database_path)
+        client = self.fake_client(tool_reply("memory.list", {}))
+
+        response = self.command("what do you remember about me", ai_client=client)
+
+        self.assertIn("[1] wifi password", response)
+        self.assertIn("secret123", response)
+
+    def test_natural_language_saving_an_existing_key_updates_it(self):
+        memory_service.save_memory("wifi password", "old", self.database_path)
+        client = self.fake_client(
+            tool_reply("memory.save", {"key": "wifi password", "value": "new"})
+        )
+
+        response = self.command(
+            "update my wifi password memory to new", ai_client=client
+        )
+
+        self.assertEqual(response, "Memory saved with ID: 1.")
+        memories = memory_service.list_memories(self.database_path)
+        self.assertEqual(len(memories), 1)
+        self.assertEqual(memories[0][2], "new")
+
+    def test_memory_delete_requires_confirmation(self):
+        memory_service.save_memory(
+            "old project notes", "obsolete", self.database_path
+        )
+        client = self.fake_client(tool_reply("memory.delete", {"memory_id": 1}))
+
+        response = self.command("Forget memory 1", ai_client=client)
+
+        self.assertIn("confirm delete memory 1", response)
+        self.assertIn("'old project notes'", response)
+        self.assertEqual(len(memory_service.list_memories(self.database_path)), 1)
+
+    def test_confirmed_memory_delete_removes_it(self):
+        memory_service.save_memory("old project notes", "obsolete", self.database_path)
+
+        self.assertEqual(self.command("confirm delete memory 1"), "Memory deleted.")
+        self.assertEqual(memory_service.list_memories(self.database_path), [])
+
+    def test_unconfirmed_memory_delete_keeps_it(self):
+        memory_service.save_memory("keep me", "value", self.database_path)
+        client = self.fake_client(tool_reply("memory.delete", {"memory_id": 1}))
+
+        self.command("Forget memory 1", ai_client=client)
+        self.command("list tasks")
+
+        self.assertEqual(len(memory_service.list_memories(self.database_path)), 1)
+
+    def test_memory_delete_of_missing_memory_confirms_then_reports(self):
+        client = self.fake_client(tool_reply("memory.delete", {"memory_id": 42}))
+
+        response = self.command("forget memory 42", ai_client=client)
+
+        self.assertIn("confirm delete memory 42", response)
+        self.assertEqual(self.command("confirm delete memory 42"), "Memory not found.")
+
+    def test_memory_save_with_invalid_arguments_is_not_executed(self):
+        client = self.fake_client(
+            tool_reply("memory.save", {"key": "   ", "value": "v"})
+        )
+
+        response = self.command("remember something", ai_client=client)
+
+        self.assertIn("That request is not supported", response)
+        self.assertEqual(memory_service.list_memories(self.database_path), [])

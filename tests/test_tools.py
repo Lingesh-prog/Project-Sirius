@@ -5,6 +5,9 @@ import unittest
 
 from app.core.tools import (
     DESTRUCTIVE_TOOLS,
+    TOOL_MEMORY_DELETE,
+    TOOL_MEMORY_LIST,
+    TOOL_MEMORY_SAVE,
     TOOL_REMINDERS_ADD,
     TOOL_REMINDERS_DELETE,
     TOOL_TASKS_ADD,
@@ -171,12 +174,42 @@ class ValidateToolRequestTests(unittest.TestCase):
                         TOOL_TASKS_UPDATE, {"task_id": 1, field: "hacked"}
                     )
 
+    def test_memory_save_requires_key_and_value(self):
+        with self.assertRaisesRegex(ToolValidationError, "key"):
+            validate_tool_request(TOOL_MEMORY_SAVE, {"value": "v"})
+
+        with self.assertRaisesRegex(ToolValidationError, "value"):
+            validate_tool_request(TOOL_MEMORY_SAVE, {"key": "k"})
+
+    def test_memory_save_normalizes_and_keeps_both_fields(self):
+        arguments = validate_tool_request(
+            TOOL_MEMORY_SAVE, {"key": "  wifi password  ", "value": "  secret  "}
+        )
+
+        self.assertEqual(arguments, {"key": "wifi password", "value": "secret"})
+
+    def test_memory_list_takes_no_arguments(self):
+        self.assertEqual(validate_tool_request(TOOL_MEMORY_LIST, {}), {})
+
+    def test_memory_delete_requires_the_memory_id(self):
+        with self.assertRaisesRegex(ToolValidationError, "memory_id"):
+            validate_tool_request(TOOL_MEMORY_DELETE, {})
+
+    def test_memory_delete_accepts_digit_strings(self):
+        self.assertEqual(
+            validate_tool_request(TOOL_MEMORY_DELETE, {"memory_id": " 4 "}),
+            {"memory_id": 4},
+        )
+
 
 class ToolSafetyTests(unittest.TestCase):
-    def test_exactly_the_two_delete_tools_are_destructive(self):
-        self.assertEqual(DESTRUCTIVE_TOOLS, {TOOL_TASKS_DELETE, TOOL_REMINDERS_DELETE})
+    def test_exactly_the_delete_tools_are_destructive(self):
+        self.assertEqual(
+            DESTRUCTIVE_TOOLS,
+            {TOOL_TASKS_DELETE, TOOL_REMINDERS_DELETE, TOOL_MEMORY_DELETE},
+        )
 
-    def test_catalog_lists_all_nine_tools(self):
+    def test_catalog_lists_all_twelve_tools(self):
         catalog = build_tool_catalog()
 
         for tool in (
@@ -189,6 +222,9 @@ class ToolSafetyTests(unittest.TestCase):
             "reminders.list",
             "reminders.complete",
             "reminders.delete",
+            "memory.save",
+            "memory.list",
+            "memory.delete",
         ):
             with self.subTest(tool=tool):
                 self.assertIn(tool, catalog)

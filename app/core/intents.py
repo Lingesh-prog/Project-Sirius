@@ -14,6 +14,7 @@ LIST_REMINDERS = "list_reminders"
 COMPLETE_REMINDER = "complete_reminder"
 DELETE_REMINDER = "delete_reminder"
 CONFIRM_DELETE_REMINDER = "confirm_delete_reminder"
+CONFIRM_DELETE_MEMORY = "confirm_delete_memory"
 UNKNOWN_COMMAND = "unknown_command"
 
 
@@ -27,6 +28,7 @@ class Intent:
     text: str | None = None
     remind_at: str | None = None
     reminder_id: int | None = None
+    memory_id: int | None = None
 
 
 def route_command(command):
@@ -70,5 +72,13 @@ def route_command(command):
         match = re.fullmatch(pattern, normalized, flags=re.IGNORECASE)
         if match:
             return Intent(intent_name, reminder_id=int(match.group(1)))
+
+    confirm_memory_match = re.fullmatch(
+        r"confirm delete memory\s+(\d+)", normalized, flags=re.IGNORECASE
+    )
+    if confirm_memory_match:
+        return Intent(
+            CONFIRM_DELETE_MEMORY, memory_id=int(confirm_memory_match.group(1))
+        )
 
     return Intent(UNKNOWN_COMMAND)

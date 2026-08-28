@@ -15,7 +15,8 @@ SIRIUS is one personal assistant application composed of small, independent modu
 - Module 2.2: LLM tool calling with validation and confirmation layer — COMPLETE
 - Module 2.3: Bounded in-session conversation context — COMPLETE
 - Module 2.4: Task update capability (tasks.update via safe NL path) — COMPLETE
-- Current test count: 161 passing
+- Module 2.5: Persistent memory foundation (explicit memory.save/list/delete) — COMPLETE
+- Current test count: 188 passing
 
 ## Current architecture
 
@@ -30,9 +31,9 @@ core.assistant
   ↓
 core.intents
   ↓
-tools.tasks.service / tools.reminders.service
+tools.tasks.service / tools.reminders.service / tools.memory.service
   ↓
-tools.tasks.repository / tools.reminders.repository
+tools.tasks.repository / tools.reminders.repository / tools.memory.repository
   ↓
 storage.database
   ↓
@@ -50,6 +51,7 @@ core.assistant → core.conversation (bounded in-session transcript)
   Destructive tool requests stop at the confirmation layer and are executed
   only after the user replies with a deterministic confirm command.
   Conversation context is memory-only and disappears when the process exits.
+  Persistent memories are written only via the explicit memory.save tool.
 ```
 
 ## Current project structure
@@ -62,6 +64,7 @@ project-sirius/
 │   ├── storage/              # SQLite setup
 │   ├── tools/tasks/          # task service and repository
 │   ├── tools/reminders/      # reminder service, repository and scheduler
+│   ├── tools/memory/         # memory service and repository
 │   ├── cli.py
 │   └── main.py
 ├── tests/
@@ -70,6 +73,7 @@ project-sirius/
 │   ├── test_assistant.py
 │   ├── test_conversation.py
 │   ├── test_intents.py
+│   ├── test_memory.py
 │   ├── test_reminders.py
 │   ├── test_scheduler.py
 │   ├── test_tasks.py
@@ -121,6 +125,11 @@ project-sirius/
   created_at, and id are protected. Follow-ups like "make it high priority"
   resolve through the existing conversation context; deletion still requires
   explicit confirmation.
+- Module 2.5 adds a persistent `memories` table (key/value with timestamps)
+  and three explicit tools (memory.save, memory.list, memory.delete). Memory
+  is explicit only: SIRIUS never writes conversation content automatically.
+  memory.delete is destructive and uses the same confirmation flow
+  ("confirm delete memory <id>").
 
 ## Development roadmap
 
@@ -129,7 +138,7 @@ project-sirius/
 - Step 3 Assistant Core ✓
 - Step 4 Reminders + lightweight scheduler ✓ — Module 1 (Sirius Focus) complete
 - Step 5 LLM integration ✓ — Modules 2.1 foundation, 2.2 tool calling, 2.3 conversation context, 2.4 task updates complete
-- Step 6 Memory
+- Step 6 Memory — Module 2.5 explicit persistent memory foundation ✓ (no auto-extraction, no semantic search)
 - Step 7 Voice
 - Step 8 Automation
 - Step 9 External integrations

@@ -20,10 +20,15 @@ TOOL_REMINDERS_ADD = "reminders.add"
 TOOL_REMINDERS_LIST = "reminders.list"
 TOOL_REMINDERS_COMPLETE = "reminders.complete"
 TOOL_REMINDERS_DELETE = "reminders.delete"
+TOOL_MEMORY_SAVE = "memory.save"
+TOOL_MEMORY_LIST = "memory.list"
+TOOL_MEMORY_DELETE = "memory.delete"
 
 # Tools that permanently remove data. Requests for these from the AI path are
 # never executed directly; the user must confirm with an explicit command.
-DESTRUCTIVE_TOOLS = frozenset({TOOL_TASKS_DELETE, TOOL_REMINDERS_DELETE})
+DESTRUCTIVE_TOOLS = frozenset(
+    {TOOL_TASKS_DELETE, TOOL_REMINDERS_DELETE, TOOL_MEMORY_DELETE}
+)
 
 # Tools that change existing data and must receive at least one update field.
 UPDATE_FIELD_TOOLS = frozenset({TOOL_TASKS_UPDATE})
@@ -58,6 +63,12 @@ TOOL_ARGUMENT_SPECS = {
     TOOL_REMINDERS_LIST: {},
     TOOL_REMINDERS_COMPLETE: {"reminder_id": (True, ID_ARGUMENT)},
     TOOL_REMINDERS_DELETE: {"reminder_id": (True, ID_ARGUMENT)},
+    TOOL_MEMORY_SAVE: {
+        "key": (True, TEXT_ARGUMENT),
+        "value": (True, TEXT_ARGUMENT),
+    },
+    TOOL_MEMORY_LIST: {},
+    TOOL_MEMORY_DELETE: {"memory_id": (True, ID_ARGUMENT)},
 }
 
 VALID_PRIORITIES = ("low", "medium", "high")

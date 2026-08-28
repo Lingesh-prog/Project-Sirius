@@ -9,6 +9,7 @@ from app.core.intents import (
     ADD_TASK,
     COMPLETE_REMINDER,
     COMPLETE_TASK,
+    CONFIRM_DELETE_MEMORY,
     CONFIRM_DELETE_REMINDER,
     CONFIRM_DELETE_TASK,
     DELETE_REMINDER,
@@ -19,6 +20,9 @@ from app.core.intents import (
 )
 from app.core.tools import (
     DESTRUCTIVE_TOOLS,
+    TOOL_MEMORY_DELETE,
+    TOOL_MEMORY_LIST,
+    TOOL_MEMORY_SAVE,
     TOOL_REMINDERS_ADD,
     TOOL_REMINDERS_COMPLETE,
     TOOL_REMINDERS_DELETE,
@@ -34,6 +38,7 @@ from app.core.tools import (
     parse_tool_response,
     validate_tool_request,
 )
+from app.tools.memory import service as memory_service
 from app.tools.reminders import service as reminder_service
 from app.tools.tasks import service
 
@@ -78,6 +83,21 @@ def format_reminders(reminders):
             f"    Status   : {status}",
         ))
     lines.append("====================================")
+    return "\n".join(lines)
+
+
+def format_memories(memories):
+    """Format memory rows returned by the memory service for the terminal."""
+    if not memories:
+        return "No memories found."
+
+    lines = ["========== YOUR MEMORIES =========="]
+    for memory_id, key, value, _created_at, _updated_at in memories:
+        lines.extend((
+            f"[{memory_id}] {key}",
+            f"    Value    : {value}",
+        ))
+    lines.append("===================================")
     return "\n".join(lines)
 
 
@@ -150,6 +170,13 @@ def _resolve_command(command, database_path=None, ai_client=None, conversation=N
         ):
             return "Reminder deleted."
         return "Reminder not found."
+
+    if intent.name == CONFIRM_DELETE_MEMORY:
+        if memory_service.delete_memory(
+            intent.memory_id, database_path=database_path
+        ):
+            return "Memory deleted."
+        return "Memory not found."
 
     return _handle_unrecognized(command, ai_client, database_path, conversation)
 
@@ -249,6 +276,20 @@ def _execute_tool(tool, arguments, database_path):
             return "Reminder completed!"
         return "Reminder not found."
 
+    if tool == TOOL_MEMORY_SAVE:
+        try:
+            memory_id = memory_service.save_memory(
+                arguments["key"], arguments["value"], database_path=database_path
+            )
+        except ValueError as error:
+            return f"Memory not saved. {error}"
+        return f"Memory saved with ID: {memory_id}."
+
+    if tool == TOOL_MEMORY_LIST:
+        return format_memories(
+            memory_service.list_memories(database_path=database_path)
+        )
+
     # Destructive tools never reach the executor; they always stop at the
     # confirmation layer above. This line is defense in depth.
     return UNKNOWN_COMMAND_MESSAGE
@@ -264,10 +305,14 @@ def _build_destructive_confirmation(tool, arguments, database_path):
         task_id = arguments["task_id"]
         target = _describe_task(task_id, database_path)
         confirm_command = f"confirm delete task {task_id}"
-    else:
+    elif tool == TOOL_REMINDERS_DELETE:
         reminder_id = arguments["reminder_id"]
         target = _describe_reminder(reminder_id, database_path)
         confirm_command = f"confirm delete reminder {reminder_id}"
+    else:
+        memory_id = arguments["memory_id"]
+        target = _describe_memory(memory_id, database_path)
+        confirm_command = f"confirm delete memory {memory_id}"
 
     return (
         f"You asked me to delete {target}. This cannot be undone.\n"
@@ -288,3 +333,10 @@ def _describe_reminder(reminder_id, database_path):
         if reminder[0] == reminder_id:
             return f"reminder {reminder_id} ('{reminder[1]}')"
     return f"reminder {reminder_id}"
+
+
+def _describe_memory(memory_id, database_path):
+    for memory in memory_service.list_memories(database_path=database_path):
+        if memory[0] == memory_id:
+            return f"memory {memory_id} ('{memory[1]}')"
+    return f"memory {memory_id}"
