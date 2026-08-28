@@ -2,7 +2,6 @@
 
 from datetime import datetime
 
-from app.ai import AIError
 from app.core.context_assembly import assemble_context
 from app.core.intents import (
     ADD_REMINDER,
@@ -19,8 +18,8 @@ from app.core.intents import (
     route_command,
 )
 from app.core.memory_context import collect_relevant_memories
+from app.core.response_handler import handle_ai_interaction
 from app.core.tools import (
-    DESTRUCTIVE_TOOLS,
     TOOL_MEMORY_DELETE,
     TOOL_MEMORY_LIST,
     TOOL_MEMORY_SAVE,
@@ -34,11 +33,7 @@ from app.core.tools import (
     TOOL_TASKS_DELETE,
     TOOL_TASKS_LIST,
     TOOL_TASKS_UPDATE,
-    ToolResponseError,
-    ToolValidationError,
     build_tool_catalog,
-    parse_tool_response,
-    validate_tool_request,
 )
 from app.tools.memory import service as memory_service
 from app.tools.reminders import service as reminder_service
@@ -202,33 +197,13 @@ def _handle_ai_request(command, ai_client, database_path, conversation=None):
         today=datetime.now().strftime("%Y-%m-%d (%A)"),
     )
 
-    try:
-        reply = ai_client.generate_text(
-            context.user_request,
-            system_prompt=context.system_prompt,
-            conversation_history=context.conversation_history,
-            relevant_memories=context.relevant_memories,
-        )
-    except AIError as error:
-        return f"AI assistant is unavailable right now: {error}"
-
-    try:
-        tool, arguments = parse_tool_response(reply)
-    except ToolResponseError as error:
-        return f"I could not process that request. {error}"
-
-    if tool is None:
-        return "I can only help with tasks and reminders right now."
-
-    try:
-        arguments = validate_tool_request(tool, arguments)
-    except ToolValidationError as error:
-        return f"That request is not supported: {error}"
-
-    if tool in DESTRUCTIVE_TOOLS:
-        return _build_destructive_confirmation(tool, arguments, database_path)
-
-    return _execute_tool(tool, arguments, database_path)
+    return handle_ai_interaction(
+        ai_client=ai_client,
+        context=context,
+        database_path=database_path,
+        execute_tool_fn=_execute_tool,
+        build_confirmation_fn=_build_destructive_confirmation,
+    )
 
 
 def _execute_tool(tool, arguments, database_path):

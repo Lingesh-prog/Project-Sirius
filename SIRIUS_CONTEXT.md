@@ -18,7 +18,9 @@ SIRIUS is one personal assistant application composed of small, independent modu
 - Module 2.5: Persistent memory foundation (explicit memory.save/list/delete) — COMPLETE
 - Module 2.6: Memory-aware intelligence (memory.search + deterministic pre-retrieval context) — COMPLETE
 - Module 2.7: Context assembly layer (deterministic, clearly separated sections for AI requests) — COMPLETE
-- Current test count: 243 passing
+- Module 2.8: Reliability and response-handling layer (natural language answers, tool dispatch, graceful error handling) — COMPLETE
+- Module 2 (AI Intelligence & Memory Foundation) — COMPLETE
+- Current test count: 265 passing
 
 ## Current architecture
 
@@ -48,7 +50,8 @@ google-genai SDK imported lazily and only inside app.ai.client)
 
 AI natural-language path:
 core.assistant → core.context_assembly (coordinates memories + bounded transcript + prompt)
-  → app.ai client → core.tools (parse + validation/safety)
+  → app.ai client → core.response_handler (contract: tools, natural language, fallbacks)
+  → core.tools (parse + validation/safety)
   → tools.*.service → repository → SQLite
   Destructive tool requests stop at the confirmation layer and are executed
   only after the user replies with a deterministic confirm command.
@@ -79,6 +82,7 @@ project-sirius/
 │   ├── test_memory.py
 │   ├── test_memory_context.py
 │   ├── test_reminders.py
+│   ├── test_response_handler.py
 │   ├── test_scheduler.py
 │   ├── test_tasks.py
 │   └── test_tools.py
@@ -143,6 +147,12 @@ project-sirius/
   coordinates relevant persistent memories, bounded in-session conversation
   history, the current user request, and system instructions into deterministic,
   unambiguous sections without modifying data, calling tools, or querying SQLite.
+- Module 2.8 adds `core.response_handler`: the final reliability and response-handling
+  layer for SIRIUS AI interactions. Enforces a deterministic response contract
+  supporting valid tool requests, ordinary natural-language answers, and clean,
+  graceful error fallbacks (provider errors, empty responses, malformed JSON,
+  multiple tool requests, unexpected exceptions) without leaking internal stack
+  traces or giving the AI execution authority.
 
 ## Development roadmap
 
@@ -150,11 +160,14 @@ project-sirius/
 - Step 2 Testing ✓
 - Step 3 Assistant Core ✓
 - Step 4 Reminders + lightweight scheduler ✓ — Module 1 (Sirius Focus) complete
-- Step 5 LLM integration ✓ — Modules 2.1 foundation, 2.2 tool calling, 2.3 conversation context, 2.4 task updates, 2.7 context assembly complete
-- Step 6 Memory — Module 2.5 explicit persistent memory foundation ✓, Module 2.6 memory-aware intelligence ✓
-- Step 7 Voice
+- Step 5 LLM integration ✓ — Module 2 (2.1-2.8 AI Intelligence & Memory Foundation) complete
+- Step 6 Memory ✓ — Module 2.5 foundation, 2.6 retrieval, 2.7 context, 2.8 reliability complete
+- Step 7 Voice — Module 3 (NOT started / planned next)
 - Step 8 Automation
 - Step 9 External integrations
+
+> [!NOTE]
+> Module 3 has NOT been started. Module 2 is fully complete and validated.
 
 ## Stable Git checkpoint
 

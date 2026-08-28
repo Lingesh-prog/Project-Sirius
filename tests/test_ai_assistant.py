@@ -223,9 +223,10 @@ class AIAssistantTests(unittest.TestCase):
 
     def test_malformed_ai_responses_are_reported(self):
         for reply in (
-            "Sorry, I cannot help with that.",
-            "not json at all",
             '{"tool": 123, "arguments": {}}',
+            '{"tool": "tasks.add", "arguments": [1]}',
+            '```json\n{"tool": "tasks.add", "arguments": {broken\n```',
+            '{"tool": "tasks.add", "arguments": {}}\n{"tool": "tasks.list", "arguments": {}}',
         ):
             client = self.fake_client(reply)
             with self.subTest(reply=reply):
@@ -353,7 +354,7 @@ class AIAssistantTests(unittest.TestCase):
 
     def test_malformed_reply_with_context_is_handled_safely(self):
         context = ConversationContext()
-        client = self.fake_client("no json here")
+        client = self.fake_client('{"tool": 123, "arguments": {}}')
 
         response = self.command("do something", ai_client=client, conversation=context)
 
@@ -673,3 +674,45 @@ class AIAssistantTests(unittest.TestCase):
         self.assertIn(f"confirm delete task {task_id}", response)
         self.assertIn("This cannot be undone.", response)
         self.assertEqual(len(service.get_tasks(database_path=self.database_path)), 1)
+
+    def test_natural_language_response_is_returned_directly_without_tool_execution(self):
+        client = self.fake_client(
+            "RAM is volatile memory for active data, while ROM holds permanent firmware."
+        )
+
+        response = self.command(
+            "What is the difference between RAM and ROM?", ai_client=client
+        )
+
+        self.assertEqual(
+            response,
+            "RAM is volatile memory for active data, while ROM holds permanent firmware.",
+        )
+        self.assertEqual(service.get_tasks(database_path=self.database_path), [])
+        self.assertEqual(memory_service.list_memories(self.database_path), [])
+
+    def test_unexpected_exception_from_client_fails_gracefully(self):
+        client = FakeAIClient(error=RuntimeError("Internal socket exploded"))
+
+        response = self.command("what tasks do I have", ai_client=client)
+
+        self.assertIn("unexpected error occurred", response)
+        self.assertNotIn("socket exploded", response)
+
+    def test_multiple_tool_requests_rejected_at_assistant_level(self):
+        client = self.fake_client(
+            '{"tool": "tasks.add", "arguments": {"title": "Task 1"}}\n'
+            '{"tool": "tasks.add", "arguments": {"title": "Task 2"}}'
+        )
+
+        response = self.command("Add two tasks", ai_client=client)
+
+        self.assertIn("Multiple tool requests were returned", response)
+        self.assertEqual(service.get_tasks(database_path=self.database_path), [])
+
+    def test_empty_ai_response_reported_cleanly(self):
+        client = self.fake_client("   ")
+
+        response = self.command("Do something", ai_client=client)
+
+        self.assertEqual(response, "The AI returned an empty response.")
