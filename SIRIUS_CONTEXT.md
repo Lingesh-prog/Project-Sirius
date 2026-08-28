@@ -9,7 +9,8 @@ SIRIUS is one personal assistant application composed of small, independent modu
 - Step 1: Sirius Focus architecture refactor — COMPLETE
 - Step 2: Sirius Focus automated tests — COMPLETE
 - Step 3: Core assistant + deterministic intent routing — COMPLETE
-- Current test count: 24 passing
+- Step 4: Reminder tool + assistant command routing — COMPLETE (scheduler deferred)
+- Current test count: 44 passing
 
 ## Current architecture
 
@@ -24,9 +25,9 @@ core.assistant
   ↓
 core.intents
   ↓
-tools.tasks.service
+tools.tasks.service / tools.reminders.service
   ↓
-tools.tasks.repository
+tools.tasks.repository / tools.reminders.repository
   ↓
 storage.database
   ↓
@@ -41,11 +42,13 @@ project-sirius/
 │   ├── core/                 # assistant and deterministic intents
 │   ├── storage/              # SQLite setup
 │   ├── tools/tasks/          # task service and repository
+│   ├── tools/reminders/      # reminder service and repository
 │   ├── cli.py
 │   └── main.py
 ├── tests/
 │   ├── test_assistant.py
 │   ├── test_intents.py
+│   ├── test_reminders.py
 │   └── test_tasks.py
 ├── run.py
 ├── README.md
@@ -70,7 +73,7 @@ project-sirius/
 - Step 1 Architecture ✓
 - Step 2 Testing ✓
 - Step 3 Assistant Core ✓
-- Step 4 Reminders + scheduler
+- Step 4 Reminders ✓ (scheduler deferred to a later step by explicit instruction)
 - Step 5 LLM integration
 - Step 6 Memory
 - Step 7 Voice

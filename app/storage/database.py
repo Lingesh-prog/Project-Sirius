@@ -16,7 +16,7 @@ def get_connection(database_path=None):
 
 
 def initialize_database(database_path=None):
-    """Create the existing tasks table if it has not been created yet."""
+    """Create the SIRIUS tables required by the available tools."""
     connection = get_connection(database_path)
 
     try:
@@ -28,6 +28,16 @@ def initialize_database(database_path=None):
                 due_date TEXT,
                 priority TEXT NOT NULL DEFAULT 'Medium',
                 status TEXT NOT NULL DEFAULT 'Pending',
+                created_at TEXT NOT NULL
+            )
+        """)
+        connection.execute("""
+            CREATE TABLE IF NOT EXISTS reminders (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                text TEXT NOT NULL,
+                remind_at TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'Pending'
+                    CHECK(status IN ('Pending', 'Completed')),
                 created_at TEXT NOT NULL
             )
         """)
