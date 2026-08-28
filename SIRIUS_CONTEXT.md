@@ -13,7 +13,8 @@ SIRIUS is one personal assistant application composed of small, independent modu
 - Module 1: Sirius Focus — COMPLETE
 - Module 2.1: AI provider foundation (Gemini behind the app.ai abstraction) — COMPLETE
 - Module 2.2: LLM tool calling with validation and confirmation layer — COMPLETE
-- Current test count: 121 passing
+- Module 2.3: Bounded in-session conversation context — COMPLETE
+- Current test count: 140 passing
 
 ## Current architecture
 
@@ -42,10 +43,12 @@ app.ai (AIClient abstraction → create_ai_client() factory → GeminiClient;
 google-genai SDK imported lazily and only inside app.ai.client)
 
 AI natural-language path:
-core.assistant → app.ai client → core.tools (parse + validation/safety)
+core.assistant → core.conversation (bounded in-session transcript)
+  → app.ai client → core.tools (parse + validation/safety)
   → tools.*.service → repository → SQLite
   Destructive tool requests stop at the confirmation layer and are executed
   only after the user replies with a deterministic confirm command.
+  Conversation context is memory-only and disappears when the process exits.
 ```
 
 ## Current project structure
@@ -54,7 +57,7 @@ core.assistant → app.ai client → core.tools (parse + validation/safety)
 project-sirius/
 ├── app/
 │   ├── ai/                   # AI client abstraction, provider + prompts
-│   ├── core/                 # assistant, intents, and tool safety layer
+│   ├── core/                 # assistant, intents, context and tool safety layer
 │   ├── storage/              # SQLite setup
 │   ├── tools/tasks/          # task service and repository
 │   ├── tools/reminders/      # reminder service, repository and scheduler
@@ -64,6 +67,7 @@ project-sirius/
 │   ├── test_ai.py
 │   ├── test_ai_assistant.py
 │   ├── test_assistant.py
+│   ├── test_conversation.py
 │   ├── test_intents.py
 │   ├── test_reminders.py
 │   ├── test_scheduler.py
@@ -106,6 +110,10 @@ project-sirius/
   explicit tools (tasks/reminders: add, list, complete, delete). Deterministic
   commands keep priority; the AI path only handles unrecognized input. When
   the AI is unconfigured, SIRIUS runs exactly as before.
+- Module 2.3 adds `core.conversation.ConversationContext`: a bounded
+  (default 12 messages, configurable) in-memory transcript passed to the AI
+  with follow-up requests. Nothing is persisted and it disappears on exit;
+  validation, safety, and confirmation layers are unchanged.
 
 ## Development roadmap
 
@@ -113,7 +121,7 @@ project-sirius/
 - Step 2 Testing ✓
 - Step 3 Assistant Core ✓
 - Step 4 Reminders + lightweight scheduler ✓ — Module 1 (Sirius Focus) complete
-- Step 5 LLM integration ✓ — Module 2.1 AI foundation + Module 2.2 tool calling complete
+- Step 5 LLM integration ✓ — Modules 2.1 foundation, 2.2 tool calling, 2.3 conversation context complete
 - Step 6 Memory
 - Step 7 Voice
 - Step 8 Automation

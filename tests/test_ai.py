@@ -24,7 +24,11 @@ from app.ai.client import (
     PROVIDER_ENV_VAR,
     GeminiClient,
 )
-from app.ai.prompts import SIRIUS_SYSTEM_PROMPT, build_system_prompt
+from app.ai.prompts import (
+    SIRIUS_SYSTEM_PROMPT,
+    build_system_prompt,
+    build_tool_system_prompt,
+)
 
 
 class FakeInteractions:
@@ -196,6 +200,24 @@ class GeminiClientTests(unittest.TestCase):
         with self.assertRaisesRegex(AIConfigurationError, GEMINI_API_KEY_ENV_VAR):
             GeminiClient(api_key="   ")
 
+    def test_generate_text_embeds_conversation_history_in_the_request(self):
+        sdk_client = FakeSdkClient.responding("Done.")
+        client = GeminiClient(api_key="key-123", sdk_client=sdk_client)
+
+        client.generate_text(
+            "make it completed",
+            conversation_history=(
+                "User: Add a task to finish my DSD assignment\n"
+                "SIRIUS: Task created successfully! ID: 1"
+            ),
+        )
+
+        request = sdk_client.interactions.requests[0]
+        self.assertIn("Recent conversation:", request["input"])
+        self.assertIn("User: Add a task to finish my DSD assignment", request["input"])
+        self.assertIn("Task created successfully! ID: 1", request["input"])
+        self.assertIn("Current request: make it completed", request["input"])
+
 
 class PromptsTests(unittest.TestCase):
     """System prompt foundation for the SIRIUS assistant."""
@@ -213,3 +235,9 @@ class PromptsTests(unittest.TestCase):
 
         self.assertTrue(combined.startswith(SIRIUS_SYSTEM_PROMPT))
         self.assertTrue(combined.endswith("Prefer bullet points."))
+
+    def test_tool_calling_prompt_explains_conversation_context(self):
+        prompt = build_tool_system_prompt("- tasks.add()", today="2026-09-01 (Tuesday)")
+
+        self.assertIn("Recent conversation:", prompt)
+        self.assertIn("Current request:", prompt)

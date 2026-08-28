@@ -10,6 +10,8 @@ one branch in ``create_ai_client``.
 from abc import ABC, abstractmethod
 import os
 
+from app.ai.prompts import CONVERSATION_HEADER, CURRENT_REQUEST_HEADER
+
 
 DEFAULT_PROVIDER = "gemini"
 DEFAULT_GEMINI_MODEL = "gemini-3.7-flash"
@@ -41,8 +43,12 @@ class AIClient(ABC):
     """
 
     @abstractmethod
-    def generate_text(self, prompt, system_prompt=None):
-        """Return generated text for *prompt*, or raise an ``AIError``."""
+    def generate_text(self, prompt, system_prompt=None, conversation_history=None):
+        """Return generated text for *prompt*, or raise an ``AIError``.
+
+        *conversation_history* is an optional rendered transcript of earlier
+        turns in the current session; each provider decides how to include it.
+        """
 
 
 class GeminiClient(AIClient):
@@ -71,13 +77,17 @@ class GeminiClient(AIClient):
         """Return the Gemini model used by this client."""
         return self._model
 
-    def generate_text(self, prompt, system_prompt=None):
+    def generate_text(self, prompt, system_prompt=None, conversation_history=None):
         """Return the model's text reply for *prompt*.
 
         Raises ``AIConfigurationError`` when the local setup is broken and
         ``AIProviderError`` for any provider or API failure.
         """
-        request = {"model": self._model, "input": prompt, "store": False}
+        request = {
+            "model": self._model,
+            "input": _compose_input(prompt, conversation_history),
+            "store": False,
+        }
         if system_prompt:
             request["instructions"] = system_prompt
 
@@ -145,3 +155,14 @@ def _extract_interaction_text(interaction):
         raise AIProviderError("Gemini returned an empty response.")
 
     return output_text
+
+
+def _compose_input(prompt, conversation_history):
+    """Combine the current request with the rendered session transcript."""
+    if not conversation_history:
+        return prompt
+
+    return (
+        f"{CONVERSATION_HEADER}\n{conversation_history.strip()}\n\n"
+        f"{CURRENT_REQUEST_HEADER} {prompt}"
+    )

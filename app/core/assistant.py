@@ -80,8 +80,24 @@ def format_reminders(reminders):
     return "\n".join(lines)
 
 
-def handle_command(command, database_path=None, ai_client=None):
-    """Execute one command, falling back to AI tool calling when configured."""
+def handle_command(command, database_path=None, ai_client=None, conversation=None):
+    """Execute one command and record the exchange in the conversation context."""
+    response = _resolve_command(
+        command,
+        database_path=database_path,
+        ai_client=ai_client,
+        conversation=conversation,
+    )
+
+    if conversation is not None:
+        conversation.add_user_message(command)
+        conversation.add_assistant_message(response)
+
+    return response
+
+
+def _resolve_command(command, database_path=None, ai_client=None, conversation=None):
+    """Route and execute one command without touching conversation context."""
     intent = route_command(command)
 
     if intent.name == ADD_TASK:
@@ -134,25 +150,32 @@ def handle_command(command, database_path=None, ai_client=None):
             return "Reminder deleted."
         return "Reminder not found."
 
-    return _handle_unrecognized(command, ai_client, database_path)
+    return _handle_unrecognized(command, ai_client, database_path, conversation)
 
 
-def _handle_unrecognized(command, ai_client, database_path):
+def _handle_unrecognized(command, ai_client, database_path, conversation=None):
     """Route unrecognized input to the AI tool path when AI is configured."""
     if ai_client is None:
         return UNKNOWN_COMMAND_MESSAGE
 
-    return _handle_ai_request(command, ai_client, database_path)
+    return _handle_ai_request(command, ai_client, database_path, conversation)
 
 
-def _handle_ai_request(command, ai_client, database_path):
+def _handle_ai_request(command, ai_client, database_path, conversation=None):
     """Turn natural language into a validated tool request and run it safely."""
     system_prompt = build_tool_system_prompt(
         build_tool_catalog(), today=datetime.now().strftime("%Y-%m-%d (%A)")
     )
+    conversation_history = (
+        conversation.render_transcript() if conversation is not None else None
+    )
 
     try:
-        reply = ai_client.generate_text(command, system_prompt=system_prompt)
+        reply = ai_client.generate_text(
+            command,
+            system_prompt=system_prompt,
+            conversation_history=conversation_history,
+        )
     except AIError as error:
         return f"AI assistant is unavailable right now: {error}"
 

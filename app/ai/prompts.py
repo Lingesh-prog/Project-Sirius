@@ -10,6 +10,9 @@ SIRIUS_SYSTEM_PROMPT = (
     "and suggestions only; you cannot run commands or change anything."
 )
 
+CONVERSATION_HEADER = "Recent conversation:"
+CURRENT_REQUEST_HEADER = "Current request:"
+
 
 def build_system_prompt(extra_instructions=None):
     """Return the SIRIUS system prompt, optionally extended with extra text."""
@@ -27,6 +30,9 @@ TOOL_CALLING_SYSTEM_PROMPT = (
     "- Use the exact tool names and argument names from the catalog.\n"
     "- Convert relative dates and times into ISO format (YYYY-MM-DDTHH:MM)\n"
     "  using the current date provided below.\n"
+    "- The request may refer to earlier turns. When it contains a\n"
+    "  'Recent conversation:' section, use it to resolve words like 'it';\n"
+    "  the newest user message follows 'Current request:'.\n"
     '- If the request does not match any tool, reply {"tool": null, "arguments": {}}.\n'
     "- Never invent tools or arguments, and never add explanations or markdown.\n"
     "SIRIUS itself confirms every destructive action with the user; you never\n"

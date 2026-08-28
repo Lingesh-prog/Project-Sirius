@@ -2,6 +2,7 @@
 
 from app.ai import AIConfigurationError, create_ai_client
 from app.core.assistant import format_tasks, handle_command
+from app.core.conversation import ConversationContext
 from app.tools.tasks.service import add_task, complete_task, delete_task, get_tasks
 
 
@@ -110,6 +111,8 @@ def run():
     else:
         print("Natural-language AI mode is on.")
 
+    conversation = ConversationContext()
+
     while True:
         show_menu()
 
@@ -128,4 +131,4 @@ def run():
             print("Goodbye.")
             break
         else:
-            print(f"\n{handle_command(choice, ai_client=ai_client)}")
+            print(f"\n{handle_command(choice, ai_client=ai_client, conversation=conversation)}")

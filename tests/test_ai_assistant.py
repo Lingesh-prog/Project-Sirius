@@ -11,6 +11,7 @@ from pathlib import Path
 
 from app.ai import AIClient, AIConfigurationError, AIProviderError
 from app.core.assistant import UNKNOWN_COMMAND_MESSAGE, handle_command
+from app.core.conversation import ConversationContext
 from app.storage.database import initialize_database
 from app.tools.reminders import service as reminder_service
 from app.tools.tasks import service
@@ -22,18 +23,20 @@ def tool_reply(tool, arguments):
 
 
 class FakeAIClient(AIClient):
-    """Scripted AI client returning a canned reply or raising an error."""
+    """Scripted AI client returning canned replies or raising an error."""
 
-    def __init__(self, reply="", error=None):
-        self.reply = reply
+    def __init__(self, reply="", error=None, replies=None):
         self.error = error
         self.prompts = []
+        self.conversations = []
+        self._replies = list(replies) if replies is not None else [reply]
 
-    def generate_text(self, prompt, system_prompt=None):
+    def generate_text(self, prompt, system_prompt=None, conversation_history=None):
         self.prompts.append(system_prompt)
+        self.conversations.append(conversation_history)
         if self.error is not None:
             raise self.error
-        return self.reply
+        return self._replies.pop(0)
 
 
 class AIAssistantTests(unittest.TestCase):
@@ -45,8 +48,13 @@ class AIAssistantTests(unittest.TestCase):
     def tearDown(self):
         self.temporary_directory.cleanup()
 
-    def command(self, text, ai_client=None):
-        return handle_command(text, database_path=self.database_path, ai_client=ai_client)
+    def command(self, text, ai_client=None, conversation=None):
+        return handle_command(
+            text,
+            database_path=self.database_path,
+            ai_client=ai_client,
+            conversation=conversation,
+        )
 
     def fake_client(self, reply):
         return FakeAIClient(reply=reply)
@@ -250,3 +258,112 @@ class AIAssistantTests(unittest.TestCase):
             self.command("please complete task number 42", ai_client=client),
             "Task not found.",
         )
+
+    def test_followup_uses_previous_context_to_resolve_the_request(self):
+        context = ConversationContext()
+        client = FakeAIClient(
+            replies=[
+                tool_reply("tasks.add", {"title": "Finish DSD assignment"}),
+                tool_reply("tasks.complete", {"task_id": 1}),
+            ]
+        )
+
+        self.command(
+            "Add a task to finish my DSD assignment",
+            ai_client=client,
+            conversation=context,
+        )
+        response = self.command(
+            "make it completed", ai_client=client, conversation=context
+        )
+
+        self.assertEqual(response, "Task completed!")
+        self.assertEqual(
+            service.get_tasks(database_path=self.database_path)[0][5], "Completed"
+        )
+        history = client.conversations[1]
+        self.assertIn("Add a task to finish my DSD assignment", history)
+        self.assertIn("Task created successfully! ID: 1", history)
+        self.assertNotIn("Current request:", history)
+
+    def test_followup_requesting_a_missing_capability_is_declined(self):
+        context = ConversationContext()
+        client = FakeAIClient(
+            replies=[
+                tool_reply("tasks.add", {"title": "Finish DSD assignment"}),
+                tool_reply(None, {}),  # no existing tool can change a task's priority
+            ]
+        )
+
+        self.command(
+            "Add a task to finish my DSD assignment",
+            ai_client=client,
+            conversation=context,
+        )
+        response = self.command(
+            "make it high priority", ai_client=client, conversation=context
+        )
+
+        self.assertIn("I can only help with tasks and reminders", response)
+        self.assertEqual(
+            service.get_tasks(database_path=self.database_path)[0][4], "Medium"
+        )
+
+    def test_conversation_records_deterministic_exchanges_too(self):
+        context = ConversationContext()
+        client = self.fake_client("should not be used")
+
+        self.command("add task Direct command", ai_client=client, conversation=context)
+        self.assertIn(
+            "[1] Direct command", self.command("list tasks", conversation=context)
+        )
+
+        self.assertEqual(client.prompts, [])
+        self.assertEqual(
+            [role for role, _text in context.get_messages()],
+            ["user", "assistant", "user", "assistant"],
+        )
+
+    def test_destructive_followup_still_requires_confirmation(self):
+        context = ConversationContext()
+        client = FakeAIClient(
+            replies=[
+                tool_reply("tasks.add", {"title": "Finish DSD assignment"}),
+                tool_reply("tasks.delete", {"task_id": 1}),
+            ]
+        )
+
+        self.command(
+            "Add a task to finish my DSD assignment",
+            ai_client=client,
+            conversation=context,
+        )
+        response = self.command(
+            "delete it please", ai_client=client, conversation=context
+        )
+
+        self.assertIn("confirm delete task 1", response)
+        self.assertEqual(len(service.get_tasks(database_path=self.database_path)), 1)
+
+    def test_malformed_reply_with_context_is_handled_safely(self):
+        context = ConversationContext()
+        client = self.fake_client("no json here")
+
+        response = self.command("do something", ai_client=client, conversation=context)
+
+        self.assertIn("I could not process that request", response)
+        self.assertEqual(len(context), 2)
+
+    def test_context_stays_bounded_across_exchanges(self):
+        context = ConversationContext(max_messages=2)
+        client = FakeAIClient(replies=[tool_reply("tasks.list", {})] * 3)
+
+        self.command("first request", ai_client=client, conversation=context)
+        self.command("second request", ai_client=client, conversation=context)
+        self.command("third request", ai_client=client, conversation=context)
+
+        history = client.conversations[2]
+        self.assertIsNotNone(history)
+        self.assertNotIn("first request", history)
+        self.assertIn("second request", history)
+        self.assertNotIn("third request", history)
