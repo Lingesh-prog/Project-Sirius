@@ -8,6 +8,7 @@ from app.core.tools import (
     TOOL_MEMORY_DELETE,
     TOOL_MEMORY_LIST,
     TOOL_MEMORY_SAVE,
+    TOOL_MEMORY_SEARCH,
     TOOL_REMINDERS_ADD,
     TOOL_REMINDERS_DELETE,
     TOOL_TASKS_ADD,
@@ -201,6 +202,24 @@ class ValidateToolRequestTests(unittest.TestCase):
             {"memory_id": 4},
         )
 
+    def test_memory_search_requires_the_query(self):
+        with self.assertRaisesRegex(ToolValidationError, "query"):
+            validate_tool_request(TOOL_MEMORY_SEARCH, {})
+
+    def test_memory_search_rejects_an_empty_query(self):
+        with self.assertRaisesRegex(ToolValidationError, "query"):
+            validate_tool_request(TOOL_MEMORY_SEARCH, {"query": "   "})
+
+    def test_memory_search_normalizes_surrounding_whitespace(self):
+        self.assertEqual(
+            validate_tool_request(TOOL_MEMORY_SEARCH, {"query": "  wifi  "}),
+            {"query": "wifi"},
+        )
+
+    def test_memory_search_rejects_unknown_arguments(self):
+        with self.assertRaisesRegex(ToolValidationError, "limit"):
+            validate_tool_request(TOOL_MEMORY_SEARCH, {"query": "wifi", "limit": 3})
+
 
 class ToolSafetyTests(unittest.TestCase):
     def test_exactly_the_delete_tools_are_destructive(self):
@@ -209,7 +228,7 @@ class ToolSafetyTests(unittest.TestCase):
             {TOOL_TASKS_DELETE, TOOL_REMINDERS_DELETE, TOOL_MEMORY_DELETE},
         )
 
-    def test_catalog_lists_all_twelve_tools(self):
+    def test_catalog_lists_all_thirteen_tools(self):
         catalog = build_tool_catalog()
 
         for tool in (
@@ -224,6 +243,7 @@ class ToolSafetyTests(unittest.TestCase):
             "reminders.delete",
             "memory.save",
             "memory.list",
+            "memory.search",
             "memory.delete",
         ):
             with self.subTest(tool=tool):

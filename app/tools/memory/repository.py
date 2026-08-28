@@ -64,6 +64,38 @@ def fetch_memories(database_path=None):
         connection.close()
 
 
+def search_memories(query, database_path=None):
+    """Return memories whose key or value contains *query* (case-insensitive).
+
+    The query is matched as a literal substring: LIKE wildcards inside the
+    query are escaped and the pattern is always a bound parameter, never
+    concatenated into the SQL text. Results are ordered deterministically
+    by key.
+    """
+    connection = get_connection(database_path)
+
+    try:
+        pattern = f"%{_escape_like_pattern(query)}%"
+        cursor = connection.execute("""
+            SELECT id, key, value, created_at, updated_at
+            FROM memories
+            WHERE key LIKE ? ESCAPE '\\' OR value LIKE ? ESCAPE '\\'
+            ORDER BY key ASC, id ASC
+        """, (pattern, pattern))
+        return cursor.fetchall()
+    finally:
+        connection.close()
+
+
+def _escape_like_pattern(query):
+    """Escape LIKE wildcards so the query matches as literal text."""
+    return (
+        query.replace("\\", "\\\\")
+        .replace("%", "\\%")
+        .replace("_", "\\_")
+    )
+
+
 def delete_memory_by_id(memory_id, database_path=None):
     """Delete a memory and report whether a matching memory was found."""
     connection = get_connection(database_path)

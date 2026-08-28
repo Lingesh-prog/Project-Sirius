@@ -10,6 +10,7 @@ SIRIUS_SYSTEM_PROMPT = (
     "and suggestions only; you cannot run commands or change anything."
 )
 
+MEMORY_HEADER = "Relevant stored memories:"
 CONVERSATION_HEADER = "Recent conversation:"
 CURRENT_REQUEST_HEADER = "Current request:"
 
@@ -33,6 +34,8 @@ TOOL_CALLING_SYSTEM_PROMPT = (
     "- The request may refer to earlier turns. When it contains a\n"
     "  'Recent conversation:' section, use it to resolve words like 'it';\n"
     "  the newest user message follows 'Current request:'.\n"
+    "- When a 'Relevant stored memories:' section is present, use it to\n"
+    "  answer questions about saved facts and never invent memories.\n"
     '- If the request does not match any tool, reply {"tool": null, "arguments": {}}.\n'
     "- Never invent tools or arguments, and never add explanations or markdown.\n"
     "SIRIUS itself confirms every destructive action with the user; you never\n"

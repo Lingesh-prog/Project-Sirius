@@ -8,6 +8,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from app.ai import AIClient, AIConfigurationError, AIProviderError
 from app.core.assistant import UNKNOWN_COMMAND_MESSAGE, handle_command
@@ -30,11 +31,15 @@ class FakeAIClient(AIClient):
         self.error = error
         self.prompts = []
         self.conversations = []
+        self.memories = []
         self._replies = list(replies) if replies is not None else [reply]
 
-    def generate_text(self, prompt, system_prompt=None, conversation_history=None):
+    def generate_text(
+        self, prompt, system_prompt=None, conversation_history=None, relevant_memories=None
+    ):
         self.prompts.append(system_prompt)
         self.conversations.append(conversation_history)
+        self.memories.append(relevant_memories)
         if self.error is not None:
             raise self.error
         return self._replies.pop(0)
@@ -533,4 +538,97 @@ class AIAssistantTests(unittest.TestCase):
         response = self.command("remember something", ai_client=client)
 
         self.assertIn("That request is not supported", response)
+        self.assertEqual(memory_service.list_memories(self.database_path), [])
+
+    def test_memory_search_through_ai_returns_relevant_memories(self):
+        memory_service.save_memory("wifi password", "secret123", self.database_path)
+        memory_service.save_memory("birthday", "May 5", self.database_path)
+        client = self.fake_client(tool_reply("memory.search", {"query": "wifi"}))
+
+        response = self.command("what is my wifi password", ai_client=client)
+
+        self.assertIn("[1] wifi password", response)
+        self.assertIn("secret123", response)
+        self.assertNotIn("birthday", response)
+
+    def test_memory_search_through_ai_handles_no_matches(self):
+        client = self.fake_client(
+            tool_reply("memory.search", {"query": "nonexistent"})
+        )
+
+        response = self.command("what is my passphrase", ai_client=client)
+
+        self.assertEqual(response, "No matching memories found.")
+
+    def test_memory_search_never_modifies_memory(self):
+        memory_service.save_memory("wifi password", "secret123", self.database_path)
+        client = self.fake_client(tool_reply("memory.search", {"query": "wifi"}))
+
+        self.command("what is my wifi password", ai_client=client)
+
+        memories = memory_service.list_memories(self.database_path)
+        self.assertEqual(len(memories), 1)
+        self.assertEqual(memories[0][1], "wifi password")
+        self.assertEqual(memories[0][2], "secret123")
+
+    def test_memory_search_with_malformed_request_is_handled_safely(self):
+        client = self.fake_client(tool_reply("memory.search", {"query": "   "}))
+
+        response = self.command("search my memories", ai_client=client)
+
+        self.assertIn("That request is not supported", response)
+
+    def test_save_then_find_memory_through_the_ai_path(self):
+        client = FakeAIClient(
+            replies=[
+                tool_reply(
+                    "memory.save", {"key": "wifi password", "value": "secret123"}
+                ),
+                tool_reply("memory.search", {"query": "wifi"}),
+            ]
+        )
+
+        self.command("remember that my wifi password is secret123", ai_client=client)
+        response = self.command("what is my wifi password", ai_client=client)
+
+        self.assertIn("secret123", response)
+
+    def test_relevant_memories_reach_the_ai_separated_from_conversation(self):
+        context = ConversationContext()
+        context.add_user_message("hello")
+        context.add_assistant_message("Hi there!")
+        memory_service.save_memory("wifi password", "secret123", self.database_path)
+        client = self.fake_client(tool_reply("memory.list", {}))
+
+        self.command(
+            "what is my wifi password", ai_client=client, conversation=context
+        )
+
+        memories = client.memories[0]
+        history = client.conversations[0]
+        self.assertIn("wifi password: secret123", memories)
+        self.assertNotIn("Recent conversation:", memories)
+        self.assertIsNotNone(history)
+        self.assertNotIn("Relevant stored memories:", history)
+        self.assertNotIn("secret123", history)
+
+    def test_deterministic_commands_do_not_search_memory_or_call_the_ai(self):
+        memory_service.save_memory("wifi password", "secret123", self.database_path)
+        context = ConversationContext()
+        client = self.fake_client("should not be used")
+
+        with mock.patch.object(memory_service, "search_memories") as search:
+            self.command("list tasks", ai_client=client, conversation=context)
+
+        search.assert_not_called()
+        self.assertEqual(client.prompts, [])
+
+    def test_ai_requests_never_create_memory_automatically(self):
+        client = FakeAIClient(
+            replies=[tool_reply("tasks.list", {}), "no json here"]
+        )
+
+        self.command("what tasks do I have", ai_client=client)
+        self.command("hello there", ai_client=client)
+
         self.assertEqual(memory_service.list_memories(self.database_path), [])

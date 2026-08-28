@@ -16,7 +16,8 @@ SIRIUS is one personal assistant application composed of small, independent modu
 - Module 2.3: Bounded in-session conversation context — COMPLETE
 - Module 2.4: Task update capability (tasks.update via safe NL path) — COMPLETE
 - Module 2.5: Persistent memory foundation (explicit memory.save/list/delete) — COMPLETE
-- Current test count: 188 passing
+- Module 2.6: Memory-aware intelligence (memory.search + deterministic pre-retrieval context) — COMPLETE
+- Current test count: 222 passing
 
 ## Current architecture
 
@@ -74,6 +75,7 @@ project-sirius/
 │   ├── test_conversation.py
 │   ├── test_intents.py
 │   ├── test_memory.py
+│   ├── test_memory_context.py
 │   ├── test_reminders.py
 │   ├── test_scheduler.py
 │   ├── test_tasks.py
@@ -130,6 +132,11 @@ project-sirius/
   is explicit only: SIRIUS never writes conversation content automatically.
   memory.delete is destructive and uses the same confirmation flow
   ("confirm delete memory <id>").
+- Module 2.6 adds `memory.search(query)` (case-insensitive substring search over
+  memory key and value, parameterized SQL, 13 total tools in catalog) and
+  deterministic pre-retrieval in `core.memory_context`. Stored memories relevant
+  to the query are passed to the AI separated from the bounded conversation
+  history. Memory remains explicit: no automatic extraction or creation.
 
 ## Development roadmap
 
@@ -138,7 +145,7 @@ project-sirius/
 - Step 3 Assistant Core ✓
 - Step 4 Reminders + lightweight scheduler ✓ — Module 1 (Sirius Focus) complete
 - Step 5 LLM integration ✓ — Modules 2.1 foundation, 2.2 tool calling, 2.3 conversation context, 2.4 task updates complete
-- Step 6 Memory — Module 2.5 explicit persistent memory foundation ✓ (no auto-extraction, no semantic search)
+- Step 6 Memory — Module 2.5 explicit persistent memory foundation ✓, Module 2.6 memory-aware intelligence ✓
 - Step 7 Voice
 - Step 8 Automation
 - Step 9 External integrations

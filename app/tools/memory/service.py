@@ -41,6 +41,17 @@ def list_memories(database_path=None):
     return repository.fetch_memories(database_path=database_path)
 
 
+def search_memories(query, database_path=None):
+    """Return memories whose key or value contains the query.
+
+    Matching is a case-insensitive substring search performed by the
+    repository with parameterized SQL. Read-only; never modifies memory.
+    """
+    query = _validate_text("query", query)
+
+    return repository.search_memories(query, database_path=database_path)
+
+
 def delete_memory(memory_id, database_path=None):
     """Delete a matching memory and report whether it was found."""
     _validate_memory_id(memory_id)

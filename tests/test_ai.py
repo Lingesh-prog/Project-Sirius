@@ -218,6 +218,35 @@ class GeminiClientTests(unittest.TestCase):
         self.assertIn("Task created successfully! ID: 1", request["input"])
         self.assertIn("Current request: make it completed", request["input"])
 
+    def test_generate_text_embeds_relevant_memories_before_the_conversation(self):
+        sdk_client = FakeSdkClient.responding("Done.")
+        client = GeminiClient(api_key="key-123", sdk_client=sdk_client)
+
+        client.generate_text(
+            "what is my wifi password",
+            conversation_history="User: hello\nSIRIUS: Hi!",
+            relevant_memories="wifi password: secret123",
+        )
+
+        input_text = sdk_client.interactions.requests[0]["input"]
+        self.assertIn("Relevant stored memories:\nwifi password: secret123", input_text)
+        self.assertIn("Recent conversation:\nUser: hello\nSIRIUS: Hi!", input_text)
+        self.assertIn("Current request: what is my wifi password", input_text)
+        self.assertLess(
+            input_text.index("Relevant stored memories:"),
+            input_text.index("Recent conversation:"),
+        )
+
+    def test_generate_text_without_sections_keeps_the_prompt_unchanged(self):
+        sdk_client = FakeSdkClient.responding("Done.")
+        client = GeminiClient(api_key="key-123", sdk_client=sdk_client)
+
+        client.generate_text("plain request")
+
+        self.assertEqual(
+            sdk_client.interactions.requests[0]["input"], "plain request"
+        )
+
 
 class PromptsTests(unittest.TestCase):
     """System prompt foundation for the SIRIUS assistant."""

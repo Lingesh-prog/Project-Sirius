@@ -22,6 +22,7 @@ TOOL_REMINDERS_COMPLETE = "reminders.complete"
 TOOL_REMINDERS_DELETE = "reminders.delete"
 TOOL_MEMORY_SAVE = "memory.save"
 TOOL_MEMORY_LIST = "memory.list"
+TOOL_MEMORY_SEARCH = "memory.search"
 TOOL_MEMORY_DELETE = "memory.delete"
 
 # Tools that permanently remove data. Requests for these from the AI path are
@@ -68,6 +69,7 @@ TOOL_ARGUMENT_SPECS = {
         "value": (True, TEXT_ARGUMENT),
     },
     TOOL_MEMORY_LIST: {},
+    TOOL_MEMORY_SEARCH: {"query": (True, TEXT_ARGUMENT)},
     TOOL_MEMORY_DELETE: {"memory_id": (True, ID_ARGUMENT)},
 }
 

@@ -10,7 +10,11 @@ one branch in ``create_ai_client``.
 from abc import ABC, abstractmethod
 import os
 
-from app.ai.prompts import CONVERSATION_HEADER, CURRENT_REQUEST_HEADER
+from app.ai.prompts import (
+    CONVERSATION_HEADER,
+    CURRENT_REQUEST_HEADER,
+    MEMORY_HEADER,
+)
 
 
 DEFAULT_PROVIDER = "gemini"
@@ -43,11 +47,15 @@ class AIClient(ABC):
     """
 
     @abstractmethod
-    def generate_text(self, prompt, system_prompt=None, conversation_history=None):
+    def generate_text(
+        self, prompt, system_prompt=None, conversation_history=None, relevant_memories=None
+    ):
         """Return generated text for *prompt*, or raise an ``AIError``.
 
         *conversation_history* is an optional rendered transcript of earlier
-        turns in the current session; each provider decides how to include it.
+        turns in the current session, and *relevant_memories* an optional
+        rendering of matching stored memories; each provider decides how to
+        include them.
         """
 
 
@@ -77,7 +85,9 @@ class GeminiClient(AIClient):
         """Return the Gemini model used by this client."""
         return self._model
 
-    def generate_text(self, prompt, system_prompt=None, conversation_history=None):
+    def generate_text(
+        self, prompt, system_prompt=None, conversation_history=None, relevant_memories=None
+    ):
         """Return the model's text reply for *prompt*.
 
         Raises ``AIConfigurationError`` when the local setup is broken and
@@ -85,7 +95,7 @@ class GeminiClient(AIClient):
         """
         request = {
             "model": self._model,
-            "input": _compose_input(prompt, conversation_history),
+            "input": _compose_input(prompt, conversation_history, relevant_memories),
             "store": False,
         }
         if system_prompt:
@@ -157,12 +167,18 @@ def _extract_interaction_text(interaction):
     return output_text
 
 
-def _compose_input(prompt, conversation_history):
-    """Combine the current request with the rendered session transcript."""
-    if not conversation_history:
+def _compose_input(prompt, conversation_history=None, relevant_memories=None):
+    """Combine memories, the session transcript, and the request into one input."""
+    if not conversation_history and not relevant_memories:
         return prompt
 
-    return (
-        f"{CONVERSATION_HEADER}\n{conversation_history.strip()}\n\n"
-        f"{CURRENT_REQUEST_HEADER} {prompt}"
-    )
+    sections = []
+
+    if relevant_memories:
+        sections.append(f"{MEMORY_HEADER}\n{relevant_memories.strip()}")
+    if conversation_history:
+        sections.append(f"{CONVERSATION_HEADER}\n{conversation_history.strip()}")
+
+    sections.append(f"{CURRENT_REQUEST_HEADER} {prompt}")
+
+    return "\n\n".join(sections)

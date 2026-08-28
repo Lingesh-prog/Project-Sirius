@@ -18,11 +18,13 @@ from app.core.intents import (
     LIST_TASKS,
     route_command,
 )
+from app.core.memory_context import collect_relevant_memories, render_memories
 from app.core.tools import (
     DESTRUCTIVE_TOOLS,
     TOOL_MEMORY_DELETE,
     TOOL_MEMORY_LIST,
     TOOL_MEMORY_SAVE,
+    TOOL_MEMORY_SEARCH,
     TOOL_REMINDERS_ADD,
     TOOL_REMINDERS_COMPLETE,
     TOOL_REMINDERS_DELETE,
@@ -197,12 +199,16 @@ def _handle_ai_request(command, ai_client, database_path, conversation=None):
     conversation_history = (
         conversation.render_transcript() if conversation is not None else None
     )
+    relevant_memories = render_memories(
+        collect_relevant_memories(command, database_path=database_path)
+    )
 
     try:
         reply = ai_client.generate_text(
             command,
             system_prompt=system_prompt,
             conversation_history=conversation_history,
+            relevant_memories=relevant_memories,
         )
     except AIError as error:
         return f"AI assistant is unavailable right now: {error}"
@@ -289,6 +295,17 @@ def _execute_tool(tool, arguments, database_path):
         return format_memories(
             memory_service.list_memories(database_path=database_path)
         )
+
+    if tool == TOOL_MEMORY_SEARCH:
+        try:
+            memories = memory_service.search_memories(
+                arguments["query"], database_path=database_path
+            )
+        except ValueError as error:
+            return f"Memory search failed. {error}"
+        if not memories:
+            return "No matching memories found."
+        return format_memories(memories)
 
     # Destructive tools never reach the executor; they always stop at the
     # confirmation layer above. This line is defense in depth.
