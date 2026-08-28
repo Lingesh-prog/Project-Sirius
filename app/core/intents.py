@@ -8,10 +8,12 @@ ADD_TASK = "add_task"
 LIST_TASKS = "list_tasks"
 COMPLETE_TASK = "complete_task"
 DELETE_TASK = "delete_task"
+CONFIRM_DELETE_TASK = "confirm_delete_task"
 ADD_REMINDER = "add_reminder"
 LIST_REMINDERS = "list_reminders"
 COMPLETE_REMINDER = "complete_reminder"
 DELETE_REMINDER = "delete_reminder"
+CONFIRM_DELETE_REMINDER = "confirm_delete_reminder"
 UNKNOWN_COMMAND = "unknown_command"
 
 
@@ -54,6 +56,7 @@ def route_command(command):
     for intent_name, pattern in (
         (COMPLETE_TASK, r"complete task\s+(\d+)"),
         (DELETE_TASK, r"delete task\s+(\d+)"),
+        (CONFIRM_DELETE_TASK, r"confirm delete task\s+(\d+)"),
     ):
         match = re.fullmatch(pattern, normalized, flags=re.IGNORECASE)
         if match:
@@ -62,6 +65,7 @@ def route_command(command):
     for intent_name, pattern in (
         (COMPLETE_REMINDER, r"complete reminder\s+(\d+)"),
         (DELETE_REMINDER, r"delete reminder\s+(\d+)"),
+        (CONFIRM_DELETE_REMINDER, r"confirm delete reminder\s+(\d+)"),
     ):
         match = re.fullmatch(pattern, normalized, flags=re.IGNORECASE)
         if match:

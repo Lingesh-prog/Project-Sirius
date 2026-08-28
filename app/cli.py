@@ -1,7 +1,16 @@
 """Terminal interface for the Sirius Focus task tool."""
 
+from app.ai import AIConfigurationError, create_ai_client
 from app.core.assistant import format_tasks, handle_command
 from app.tools.tasks.service import add_task, complete_task, delete_task, get_tasks
+
+
+def _create_optional_ai_client():
+    """Return an AI client when configured, or None when AI stays disabled."""
+    try:
+        return create_ai_client()
+    except AIConfigurationError:
+        return None
 
 
 def display_tasks():
@@ -95,6 +104,12 @@ def run():
     print("\nSirius Focus v0.1 initialized.")
     print("Your personal task assistant is ready.")
 
+    ai_client = _create_optional_ai_client()
+    if ai_client is None:
+        print("Natural-language AI mode is off (missing AI configuration).")
+    else:
+        print("Natural-language AI mode is on.")
+
     while True:
         show_menu()
 
@@ -113,4 +128,4 @@ def run():
             print("Goodbye.")
             break
         else:
-            print(f"\n{handle_command(choice)}")
+            print(f"\n{handle_command(choice, ai_client=ai_client)}")
