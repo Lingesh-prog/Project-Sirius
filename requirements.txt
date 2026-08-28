@@ -1,0 +1,5 @@
+# SIRIUS Python dependencies. Install with: pip install -r requirements.txt
+
+# Official Google Gemini SDK - required by app/ai (Module 2.1).
+# Interactions API support needs >= 2.3.0; the SDK team advises < 3.0.0.
+google-genai>=2.3.0,<3.0.0

@@ -11,7 +11,8 @@ SIRIUS is one personal assistant application composed of small, independent modu
 - Step 3: Core assistant + deterministic intent routing — COMPLETE
 - Step 4: Reminders, assistant command routing + lightweight scheduler — COMPLETE
 - Module 1: Sirius Focus — COMPLETE
-- Current test count: 56 passing
+- Module 2.1: AI provider foundation (Gemini behind the app.ai abstraction) — COMPLETE
+- Current test count: 76 passing
 
 ## Current architecture
 
@@ -35,6 +36,9 @@ storage.database
 SQLite
 
 tools.reminders.scheduler → background polling → tools.reminders.service
+
+app.ai (AIClient abstraction → create_ai_client() factory → GeminiClient;
+google-genai SDK imported lazily and only inside app.ai.client)
 ```
 
 ## Current project structure
@@ -42,6 +46,7 @@ tools.reminders.scheduler → background polling → tools.reminders.service
 ```text
 project-sirius/
 ├── app/
+│   ├── ai/                   # AI client abstraction, provider + prompts
 │   ├── core/                 # assistant and deterministic intents
 │   ├── storage/              # SQLite setup
 │   ├── tools/tasks/          # task service and repository
@@ -49,11 +54,14 @@ project-sirius/
 │   ├── cli.py
 │   └── main.py
 ├── tests/
+│   ├── test_ai.py
 │   ├── test_assistant.py
 │   ├── test_intents.py
 │   ├── test_reminders.py
 │   ├── test_scheduler.py
 │   └── test_tasks.py
+├── .env.example              # AI settings template (never commit the real .env)
+├── requirements.txt
 ├── run.py
 ├── README.md
 └── SIRIUS_CONTEXT.md
@@ -71,6 +79,17 @@ project-sirius/
 - Every new capability requires tests.
 - An LLM must not directly perform destructive actions.
 - Do not change the database schema unless explicitly approved.
+- All AI access goes through the app.ai abstraction; provider SDKs are
+  imported only inside app.ai.client, never in the assistant, CLI, or tools.
+
+## AI configuration (Module 2.1)
+
+- `SIRIUS_AI_PROVIDER` — provider name; currently only `gemini` (default)
+- `SIRIUS_GEMINI_API_KEY` — Gemini API key; required for AI features
+- `SIRIUS_GEMINI_MODEL` — optional model override (default: `gemini-3.7-flash`)
+- Copy `.env.example` to `.env`, fill in the key, and never commit `.env`.
+- The rest of SIRIUS uses `create_ai_client()` / `AIClient` only. Tool
+  calling, memory, and assistant wiring are NOT part of Module 2.1.
 
 ## Development roadmap
 
@@ -78,7 +97,7 @@ project-sirius/
 - Step 2 Testing ✓
 - Step 3 Assistant Core ✓
 - Step 4 Reminders + lightweight scheduler ✓ — Module 1 (Sirius Focus) complete
-- Step 5 LLM integration
+- Step 5 LLM integration — Module 2.1 AI provider foundation ✓ (2.2 tool calling next)
 - Step 6 Memory
 - Step 7 Voice
 - Step 8 Automation
