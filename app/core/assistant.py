@@ -27,6 +27,7 @@ from app.core.tools import (
     TOOL_TASKS_COMPLETE,
     TOOL_TASKS_DELETE,
     TOOL_TASKS_LIST,
+    TOOL_TASKS_UPDATE,
     ToolResponseError,
     ToolValidationError,
     build_tool_catalog,
@@ -217,6 +218,15 @@ def _execute_tool(tool, arguments, database_path):
         if service.complete_task(arguments["task_id"], database_path=database_path):
             return "Task completed!"
         return "Task not found."
+
+    if tool == TOOL_TASKS_UPDATE:
+        task_id = arguments.pop("task_id")
+        try:
+            if service.update_task(task_id, database_path=database_path, **arguments):
+                return "Task updated."
+            return "Task not found."
+        except ValueError as error:
+            return f"Task not updated. {error}"
 
     if tool == TOOL_REMINDERS_ADD:
         try:

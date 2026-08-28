@@ -14,6 +14,7 @@ import re
 TOOL_TASKS_ADD = "tasks.add"
 TOOL_TASKS_LIST = "tasks.list"
 TOOL_TASKS_COMPLETE = "tasks.complete"
+TOOL_TASKS_UPDATE = "tasks.update"
 TOOL_TASKS_DELETE = "tasks.delete"
 TOOL_REMINDERS_ADD = "reminders.add"
 TOOL_REMINDERS_LIST = "reminders.list"
@@ -23,6 +24,9 @@ TOOL_REMINDERS_DELETE = "reminders.delete"
 # Tools that permanently remove data. Requests for these from the AI path are
 # never executed directly; the user must confirm with an explicit command.
 DESTRUCTIVE_TOOLS = frozenset({TOOL_TASKS_DELETE, TOOL_REMINDERS_DELETE})
+
+# Tools that change existing data and must receive at least one update field.
+UPDATE_FIELD_TOOLS = frozenset({TOOL_TASKS_UPDATE})
 
 TEXT_ARGUMENT = "text"
 ID_ARGUMENT = "id"
@@ -39,6 +43,13 @@ TOOL_ARGUMENT_SPECS = {
     },
     TOOL_TASKS_LIST: {},
     TOOL_TASKS_COMPLETE: {"task_id": (True, ID_ARGUMENT)},
+    TOOL_TASKS_UPDATE: {
+        "task_id": (True, ID_ARGUMENT),
+        "title": (False, TEXT_ARGUMENT),
+        "description": (False, TEXT_ARGUMENT),
+        "due_date": (False, DATE_TEXT_ARGUMENT),
+        "priority": (False, PRIORITY_ARGUMENT),
+    },
     TOOL_TASKS_DELETE: {"task_id": (True, ID_ARGUMENT)},
     TOOL_REMINDERS_ADD: {
         "text": (True, TEXT_ARGUMENT),
@@ -122,6 +133,15 @@ def validate_tool_request(tool, arguments):
                 )
             continue
         normalized[name] = _coerce_argument(tool, name, kind, value)
+
+    if tool in UPDATE_FIELD_TOOLS:
+        update_fields = [
+            name for name, (required, _kind) in spec.items() if not required
+        ]
+        if not any(name in normalized for name in update_fields):
+            raise ToolValidationError(
+                f"At least one field to update must be supplied for tool '{tool}'."
+            )
 
     return normalized
 

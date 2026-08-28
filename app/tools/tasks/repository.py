@@ -69,3 +69,23 @@ def delete_task_by_id(task_id, database_path=None):
         return cursor.rowcount > 0
     finally:
         connection.close()
+
+
+def update_task_fields(task_id, fields, database_path=None):
+    """Update the given columns of one task and report whether it was found.
+
+    *fields* must be an ordered mapping of trusted column names to values;
+    callers build it from a fixed whitelist, never from raw user input.
+    """
+    connection = get_connection(database_path)
+
+    try:
+        set_clause = ", ".join(f"{column} = ?" for column in fields)
+        cursor = connection.execute(
+            f"UPDATE tasks SET {set_clause} WHERE id = ?",
+            (*fields.values(), task_id),
+        )
+        connection.commit()
+        return cursor.rowcount > 0
+    finally:
+        connection.close()

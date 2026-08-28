@@ -48,3 +48,36 @@ def complete_task(task_id, database_path=None):
 def delete_task(task_id, database_path=None):
     """Delete a matching task."""
     return repository.delete_task_by_id(task_id, database_path=database_path)
+
+
+UPDATABLE_FIELDS = ("title", "description", "due_date", "priority")
+PROTECTED_FIELDS = ("status", "created_at", "id")
+
+
+def update_task(task_id, database_path=None, **fields):
+    """Update the given fields of one existing task.
+
+    Only title, description, due_date, and priority can be changed. Status,
+    created_at, and id are protected. At least one updatable field must be
+    supplied. Returns True when a matching task was found.
+    """
+    updates = {}
+    for name, value in fields.items():
+        if name in PROTECTED_FIELDS:
+            raise ValueError(f"Field '{name}' cannot be updated.")
+        if name not in UPDATABLE_FIELDS:
+            raise ValueError(f"Unknown task field '{name}'.")
+        if value is None:
+            continue
+        updates[name] = value
+
+    if not updates:
+        raise ValueError("At least one field must be supplied to update a task.")
+
+    if "title" in updates and not updates["title"].strip():
+        raise ValueError("Task title cannot be empty.")
+
+    if "priority" in updates and updates["priority"] not in VALID_PRIORITIES:
+        raise ValueError("Priority must be Low, Medium, or High.")
+
+    return repository.update_task_fields(task_id, updates, database_path=database_path)

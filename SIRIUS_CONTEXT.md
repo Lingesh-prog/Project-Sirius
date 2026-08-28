@@ -14,7 +14,8 @@ SIRIUS is one personal assistant application composed of small, independent modu
 - Module 2.1: AI provider foundation (Gemini behind the app.ai abstraction) — COMPLETE
 - Module 2.2: LLM tool calling with validation and confirmation layer — COMPLETE
 - Module 2.3: Bounded in-session conversation context — COMPLETE
-- Current test count: 140 passing
+- Module 2.4: Task update capability (tasks.update via safe NL path) — COMPLETE
+- Current test count: 161 passing
 
 ## Current architecture
 
@@ -106,14 +107,20 @@ project-sirius/
 - `SIRIUS_GEMINI_MODEL` — optional model override (default: `gemini-3.7-flash`)
 - Copy `.env.example` to `.env`, fill in the key, and never commit `.env`.
 - Everything outside app.ai uses `create_ai_client()` / `AIClient` only.
-- Module 2.2 connects the assistant to the AI through core.tools: eight
-  explicit tools (tasks/reminders: add, list, complete, delete). Deterministic
+- Module 2.2 connects the assistant to the AI through core.tools: nine
+  explicit tools (tasks: add, update, list, complete, delete; reminders:
+  add, list, complete, delete). Deterministic
   commands keep priority; the AI path only handles unrecognized input. When
   the AI is unconfigured, SIRIUS runs exactly as before.
 - Module 2.3 adds `core.conversation.ConversationContext`: a bounded
   (default 12 messages, configurable) in-memory transcript passed to the AI
   with follow-up requests. Nothing is persisted and it disappears on exit;
   validation, safety, and confirmation layers are unchanged.
+- Module 2.4 adds `tasks.update` (title, description, due_date, priority).
+  The task id is required, at least one field must be supplied, and status,
+  created_at, and id are protected. Follow-ups like "make it high priority"
+  resolve through the existing conversation context; deletion still requires
+  explicit confirmation.
 
 ## Development roadmap
 
@@ -121,7 +128,7 @@ project-sirius/
 - Step 2 Testing ✓
 - Step 3 Assistant Core ✓
 - Step 4 Reminders + lightweight scheduler ✓ — Module 1 (Sirius Focus) complete
-- Step 5 LLM integration ✓ — Modules 2.1 foundation, 2.2 tool calling, 2.3 conversation context complete
+- Step 5 LLM integration ✓ — Modules 2.1 foundation, 2.2 tool calling, 2.3 conversation context, 2.4 task updates complete
 - Step 6 Memory
 - Step 7 Voice
 - Step 8 Automation

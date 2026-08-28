@@ -9,6 +9,7 @@ from app.core.tools import (
     TOOL_REMINDERS_DELETE,
     TOOL_TASKS_ADD,
     TOOL_TASKS_DELETE,
+    TOOL_TASKS_UPDATE,
     ToolResponseError,
     ToolValidationError,
     build_tool_catalog,
@@ -133,16 +134,54 @@ class ValidateToolRequestTests(unittest.TestCase):
         with self.assertRaisesRegex(ToolValidationError, "Low, Medium, High"):
             validate_tool_request(TOOL_TASKS_ADD, {"title": "A", "priority": "Urgent"})
 
+    def test_update_requires_the_task_id(self):
+        with self.assertRaisesRegex(ToolValidationError, "task_id"):
+            validate_tool_request(TOOL_TASKS_UPDATE, {"title": "New title"})
+
+    def test_update_requires_at_least_one_field(self):
+        with self.assertRaisesRegex(ToolValidationError, "At least one field"):
+            validate_tool_request(TOOL_TASKS_UPDATE, {"task_id": 1})
+
+    def test_update_accepts_multiple_fields_and_normalizes_them(self):
+        arguments = validate_tool_request(
+            TOOL_TASKS_UPDATE,
+            {
+                "task_id": " 2 ",
+                "title": "  Renamed  ",
+                "priority": "high",
+                "due_date": "2026-09-04",
+            },
+        )
+
+        self.assertEqual(
+            arguments,
+            {
+                "task_id": 2,
+                "title": "Renamed",
+                "due_date": "2026-09-04",
+                "priority": "High",
+            },
+        )
+
+    def test_update_rejects_protected_fields(self):
+        for field in ("status", "created_at", "id"):
+            with self.subTest(field=field):
+                with self.assertRaisesRegex(ToolValidationError, f"'{field}'"):
+                    validate_tool_request(
+                        TOOL_TASKS_UPDATE, {"task_id": 1, field: "hacked"}
+                    )
+
 
 class ToolSafetyTests(unittest.TestCase):
     def test_exactly_the_two_delete_tools_are_destructive(self):
         self.assertEqual(DESTRUCTIVE_TOOLS, {TOOL_TASKS_DELETE, TOOL_REMINDERS_DELETE})
 
-    def test_catalog_lists_all_eight_tools(self):
+    def test_catalog_lists_all_nine_tools(self):
         catalog = build_tool_catalog()
 
         for tool in (
             "tasks.add",
+            "tasks.update",
             "tasks.list",
             "tasks.complete",
             "tasks.delete",

@@ -367,3 +367,86 @@ class AIAssistantTests(unittest.TestCase):
         self.assertNotIn("first request", history)
         self.assertIn("second request", history)
         self.assertNotIn("third request", history)
+
+    def test_natural_language_updates_a_task(self):
+        task_id = service.add_task(
+            "DSD assignment", description="Start here", database_path=self.database_path
+        )
+        client = self.fake_client(
+            tool_reply(
+                "tasks.update",
+                {"task_id": task_id, "title": "Finish DSD assignment", "priority": "high"},
+            )
+        )
+
+        response = self.command(
+            "rename my DSD task to Finish DSD assignment and make it high priority",
+            ai_client=client,
+        )
+
+        self.assertEqual(response, "Task updated.")
+        task = service.get_tasks(database_path=self.database_path)[0]
+        self.assertEqual(task[1], "Finish DSD assignment")
+        self.assertEqual(task[2], "Start here")
+        self.assertEqual(task[4], "High")
+
+    def test_conversation_context_enables_make_it_high_priority(self):
+        context = ConversationContext()
+        client = FakeAIClient(
+            replies=[
+                tool_reply("tasks.add", {"title": "Finish DSD assignment"}),
+                tool_reply("tasks.update", {"task_id": 1, "priority": "High"}),
+            ]
+        )
+
+        self.command(
+            "Add a task to finish my DSD assignment",
+            ai_client=client,
+            conversation=context,
+        )
+        response = self.command(
+            "make it high priority", ai_client=client, conversation=context
+        )
+
+        self.assertEqual(response, "Task updated.")
+        self.assertEqual(
+            service.get_tasks(database_path=self.database_path)[0][4], "High"
+        )
+        history = client.conversations[1]
+        self.assertIn("Add a task to finish my DSD assignment", history)
+        self.assertIn("Task created successfully! ID: 1", history)
+
+    def test_update_via_ai_requires_at_least_one_field(self):
+        task_id = service.add_task("Untouched", database_path=self.database_path)
+        client = self.fake_client(tool_reply("tasks.update", {"task_id": task_id}))
+
+        response = self.command("update task 1", ai_client=client)
+
+        self.assertIn("That request is not supported", response)
+        self.assertEqual(
+            service.get_tasks(database_path=self.database_path)[0][1], "Untouched"
+        )
+
+    def test_update_via_ai_rejects_protected_fields(self):
+        task_id = service.add_task("Protected", database_path=self.database_path)
+        client = self.fake_client(
+            tool_reply("tasks.update", {"task_id": task_id, "status": "Completed"})
+        )
+
+        response = self.command(
+            "mark task 1 as done without completing it", ai_client=client
+        )
+
+        self.assertIn("That request is not supported", response)
+        self.assertEqual(
+            service.get_tasks(database_path=self.database_path)[0][5], "Pending"
+        )
+
+    def test_update_via_ai_reports_missing_task(self):
+        client = self.fake_client(
+            tool_reply("tasks.update", {"task_id": 42, "title": "Ghost"})
+        )
+
+        self.assertEqual(
+            self.command("rename task 42 to Ghost", ai_client=client), "Task not found."
+        )

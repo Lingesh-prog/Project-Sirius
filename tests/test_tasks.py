@@ -150,3 +150,146 @@ class TaskServiceTests(unittest.TestCase):
         self.assertTrue(service.complete_task(task_id, database_path=self.database_path))
         self.assertTrue(service.delete_task(task_id, database_path=self.database_path))
         self.assertEqual(self.get_tasks(), [])
+
+
+class TaskUpdateTests(unittest.TestCase):
+    """Exercise task updates through the public service API only."""
+
+    def setUp(self):
+        self.temporary_directory = tempfile.TemporaryDirectory()
+        self.database_path = Path(self.temporary_directory.name) / "sirius-test.db"
+        initialize_database(self.database_path)
+
+    def tearDown(self):
+        self.temporary_directory.cleanup()
+
+    def add_task(self, title="Test task", **kwargs):
+        """Create a task in this test's disposable database."""
+        return service.add_task(title, database_path=self.database_path, **kwargs)
+
+    def get_tasks(self):
+        """List tasks from this test's disposable database."""
+        return service.get_tasks(database_path=self.database_path)
+
+    def test_update_title_changes_only_the_title(self):
+        task_id = self.add_task("Old title", description="Keep me", priority="High")
+
+        self.assertTrue(
+            service.update_task(
+                task_id, title="Finish DSD assignment", database_path=self.database_path
+            )
+        )
+
+        task = self.get_tasks()[0]
+        self.assertEqual(task[1], "Finish DSD assignment")
+        self.assertEqual(task[2], "Keep me")
+        self.assertEqual(task[4], "High")
+        self.assertEqual(task[5], "Pending")
+
+    def test_update_description_changes_only_the_description(self):
+        task_id = self.add_task("Study", description="Old text")
+
+        self.assertTrue(
+            service.update_task(
+                task_id,
+                description="complete the database section",
+                database_path=self.database_path,
+            )
+        )
+
+        self.assertEqual(self.get_tasks()[0][2], "complete the database section")
+
+    def test_update_due_date_changes_only_the_due_date(self):
+        task_id = self.add_task("Deadline task", due_date="2026-08-30")
+
+        self.assertTrue(
+            service.update_task(
+                task_id, due_date="2026-09-04", database_path=self.database_path
+            )
+        )
+
+        self.assertEqual(self.get_tasks()[0][3], "2026-09-04")
+
+    def test_update_priority_changes_only_the_priority(self):
+        task_id = self.add_task("Priority task")
+
+        self.assertTrue(
+            service.update_task(
+                task_id, priority="High", database_path=self.database_path
+            )
+        )
+
+        self.assertEqual(self.get_tasks()[0][4], "High")
+
+    def test_update_supports_multiple_fields_at_once(self):
+        task_id = self.add_task("Multi task")
+
+        self.assertTrue(
+            service.update_task(
+                task_id,
+                title="Renamed task",
+                description="New description",
+                due_date="2026-09-10",
+                priority="Low",
+                database_path=self.database_path,
+            )
+        )
+
+        task = self.get_tasks()[0]
+        self.assertEqual(
+            task[1:5], ("Renamed task", "New description", "2026-09-10", "Low")
+        )
+
+    def test_update_preserves_status_created_at_and_id(self):
+        task_id = self.add_task("Protected task")
+        original = self.get_tasks()[0]
+
+        service.update_task(task_id, title="Renamed", database_path=self.database_path)
+
+        task = self.get_tasks()[0]
+        self.assertEqual(task[0], original[0])
+        self.assertEqual(task[5], original[5])
+        self.assertEqual(task[6], original[6])
+
+    def test_update_missing_task_returns_false(self):
+        self.assertFalse(
+            service.update_task(9999, title="Ghost", database_path=self.database_path)
+        )
+
+    def test_update_without_fields_is_rejected(self):
+        task_id = self.add_task("Untouched task")
+
+        with self.assertRaisesRegex(ValueError, "At least one field"):
+            service.update_task(task_id, database_path=self.database_path)
+
+    def test_update_rejects_protected_fields(self):
+        task_id = self.add_task("Protected task")
+
+        for field in ("status", "created_at", "id"):
+            with self.subTest(field=field):
+                with self.assertRaisesRegex(ValueError, "cannot be updated"):
+                    service.update_task(
+                        task_id,
+                        **{field: "hacked"},
+                        database_path=self.database_path,
+                    )
+
+    def test_update_rejects_unknown_fields(self):
+        task_id = self.add_task("Unknown field task")
+
+        with self.assertRaisesRegex(ValueError, "Unknown task field"):
+            service.update_task(task_id, color="red", database_path=self.database_path)
+
+    def test_update_rejects_empty_title(self):
+        task_id = self.add_task("Title task")
+
+        with self.assertRaisesRegex(ValueError, "Task title cannot be empty"):
+            service.update_task(task_id, title="   ", database_path=self.database_path)
+
+    def test_update_rejects_invalid_priority(self):
+        task_id = self.add_task("Priority task")
+
+        with self.assertRaisesRegex(ValueError, "Priority must be Low, Medium, or High"):
+            service.update_task(
+                task_id, priority="Urgent", database_path=self.database_path
+            )
