@@ -3,7 +3,7 @@
 from datetime import datetime
 
 from app.ai import AIError
-from app.ai.prompts import build_tool_system_prompt
+from app.core.context_assembly import assemble_context
 from app.core.intents import (
     ADD_REMINDER,
     ADD_TASK,
@@ -18,7 +18,7 @@ from app.core.intents import (
     LIST_TASKS,
     route_command,
 )
-from app.core.memory_context import collect_relevant_memories, render_memories
+from app.core.memory_context import collect_relevant_memories
 from app.core.tools import (
     DESTRUCTIVE_TOOLS,
     TOOL_MEMORY_DELETE,
@@ -193,22 +193,21 @@ def _handle_unrecognized(command, ai_client, database_path, conversation=None):
 
 def _handle_ai_request(command, ai_client, database_path, conversation=None):
     """Turn natural language into a validated tool request and run it safely."""
-    system_prompt = build_tool_system_prompt(
-        build_tool_catalog(), today=datetime.now().strftime("%Y-%m-%d (%A)")
-    )
-    conversation_history = (
-        conversation.render_transcript() if conversation is not None else None
-    )
-    relevant_memories = render_memories(
-        collect_relevant_memories(command, database_path=database_path)
+    memories = collect_relevant_memories(command, database_path=database_path)
+    context = assemble_context(
+        user_request=command,
+        conversation_history=conversation,
+        relevant_memories=memories,
+        tool_catalog=build_tool_catalog(),
+        today=datetime.now().strftime("%Y-%m-%d (%A)"),
     )
 
     try:
         reply = ai_client.generate_text(
-            command,
-            system_prompt=system_prompt,
-            conversation_history=conversation_history,
-            relevant_memories=relevant_memories,
+            context.user_request,
+            system_prompt=context.system_prompt,
+            conversation_history=context.conversation_history,
+            relevant_memories=context.relevant_memories,
         )
     except AIError as error:
         return f"AI assistant is unavailable right now: {error}"

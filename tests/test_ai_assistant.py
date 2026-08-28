@@ -632,3 +632,44 @@ class AIAssistantTests(unittest.TestCase):
         self.command("hello there", ai_client=client)
 
         self.assertEqual(memory_service.list_memories(self.database_path), [])
+
+    def test_end_to_end_context_assembly_passes_memories_and_conversation_cleanly(self):
+        memory_service.save_memory("project code", "SIRIUS-42", self.database_path)
+        context = ConversationContext()
+        context.add_user_message("start project")
+        context.add_assistant_message("Project started.")
+
+        client = self.fake_client(tool_reply("tasks.add", {"title": "Implement feature"}))
+
+        response = self.command(
+            "add a task for our project code",
+            ai_client=client,
+            conversation=context,
+        )
+
+        self.assertIn("Task created successfully!", response)
+        self.assertEqual(client.memories[0], "project code: SIRIUS-42")
+        self.assertEqual(
+            client.conversations[0],
+            "User: start project\nSIRIUS: Project started.",
+        )
+        self.assertIn("Tool catalog:", client.prompts[0])
+
+    def test_end_to_end_context_assembly_preserves_tool_validation_and_safety(self):
+        context = ConversationContext()
+        client = self.fake_client(tool_reply("tasks.unknown_tool", {}))
+
+        response = self.command("run invalid tool", ai_client=client, conversation=context)
+
+        self.assertIn("That request is not supported: Unknown tool", response)
+
+    def test_end_to_end_context_assembly_destructive_tool_still_requires_confirmation(self):
+        task_id = service.add_task("Danger task", database_path=self.database_path)
+        context = ConversationContext()
+        client = self.fake_client(tool_reply("tasks.delete", {"task_id": task_id}))
+
+        response = self.command("remove that task", ai_client=client, conversation=context)
+
+        self.assertIn(f"confirm delete task {task_id}", response)
+        self.assertIn("This cannot be undone.", response)
+        self.assertEqual(len(service.get_tasks(database_path=self.database_path)), 1)

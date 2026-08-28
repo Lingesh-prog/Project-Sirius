@@ -10,11 +10,7 @@ one branch in ``create_ai_client``.
 from abc import ABC, abstractmethod
 import os
 
-from app.ai.prompts import (
-    CONVERSATION_HEADER,
-    CURRENT_REQUEST_HEADER,
-    MEMORY_HEADER,
-)
+from app.core.context_assembly import assemble_prompt_input
 
 
 DEFAULT_PROVIDER = "gemini"
@@ -169,16 +165,8 @@ def _extract_interaction_text(interaction):
 
 def _compose_input(prompt, conversation_history=None, relevant_memories=None):
     """Combine memories, the session transcript, and the request into one input."""
-    if not conversation_history and not relevant_memories:
-        return prompt
-
-    sections = []
-
-    if relevant_memories:
-        sections.append(f"{MEMORY_HEADER}\n{relevant_memories.strip()}")
-    if conversation_history:
-        sections.append(f"{CONVERSATION_HEADER}\n{conversation_history.strip()}")
-
-    sections.append(f"{CURRENT_REQUEST_HEADER} {prompt}")
-
-    return "\n\n".join(sections)
+    return assemble_prompt_input(
+        prompt,
+        conversation_history=conversation_history,
+        relevant_memories=relevant_memories,
+    )

@@ -17,7 +17,8 @@ SIRIUS is one personal assistant application composed of small, independent modu
 - Module 2.4: Task update capability (tasks.update via safe NL path) — COMPLETE
 - Module 2.5: Persistent memory foundation (explicit memory.save/list/delete) — COMPLETE
 - Module 2.6: Memory-aware intelligence (memory.search + deterministic pre-retrieval context) — COMPLETE
-- Current test count: 222 passing
+- Module 2.7: Context assembly layer (deterministic, clearly separated sections for AI requests) — COMPLETE
+- Current test count: 243 passing
 
 ## Current architecture
 
@@ -46,7 +47,7 @@ app.ai (AIClient abstraction → create_ai_client() factory → GeminiClient;
 google-genai SDK imported lazily and only inside app.ai.client)
 
 AI natural-language path:
-core.assistant → core.conversation (bounded in-session transcript)
+core.assistant → core.context_assembly (coordinates memories + bounded transcript + prompt)
   → app.ai client → core.tools (parse + validation/safety)
   → tools.*.service → repository → SQLite
   Destructive tool requests stop at the confirmation layer and are executed
@@ -72,6 +73,7 @@ project-sirius/
 │   ├── test_ai.py
 │   ├── test_ai_assistant.py
 │   ├── test_assistant.py
+│   ├── test_context_assembly.py
 │   ├── test_conversation.py
 │   ├── test_intents.py
 │   ├── test_memory.py
@@ -137,6 +139,10 @@ project-sirius/
   deterministic pre-retrieval in `core.memory_context`. Stored memories relevant
   to the query are passed to the AI separated from the bounded conversation
   history. Memory remains explicit: no automatic extraction or creation.
+- Module 2.7 adds `core.context_assembly`: a dedicated context assembly layer that
+  coordinates relevant persistent memories, bounded in-session conversation
+  history, the current user request, and system instructions into deterministic,
+  unambiguous sections without modifying data, calling tools, or querying SQLite.
 
 ## Development roadmap
 
@@ -144,7 +150,7 @@ project-sirius/
 - Step 2 Testing ✓
 - Step 3 Assistant Core ✓
 - Step 4 Reminders + lightweight scheduler ✓ — Module 1 (Sirius Focus) complete
-- Step 5 LLM integration ✓ — Modules 2.1 foundation, 2.2 tool calling, 2.3 conversation context, 2.4 task updates complete
+- Step 5 LLM integration ✓ — Modules 2.1 foundation, 2.2 tool calling, 2.3 conversation context, 2.4 task updates, 2.7 context assembly complete
 - Step 6 Memory — Module 2.5 explicit persistent memory foundation ✓, Module 2.6 memory-aware intelligence ✓
 - Step 7 Voice
 - Step 8 Automation
