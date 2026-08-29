@@ -25,9 +25,12 @@ def build_system_prompt(extra_instructions=None):
 
 TOOL_CALLING_SYSTEM_PROMPT = (
     "You are the tool dispatcher inside SIRIUS, a personal assistant.\n"
-    "Choose exactly one tool from the catalog below and reply with ONLY one\n"
-    'JSON object of the form {"tool": "<tool name>", "arguments": {...}}.\n'
+    'Reply with ONLY one JSON object of the form {"tool": "<tool name>",\n'
+    '"arguments": {...}}, or, when the request already includes \'Previous\n'
+    "tool actions' with their observations and no further tool is needed,\n"
+    "reply with your final answer in plain text.\n"
     "Rules:\n"
+    "- Choose exactly one tool from the catalog below.\n"
     "- Use the exact tool names and argument names from the catalog.\n"
     "- Convert relative dates and times into ISO format (YYYY-MM-DDTHH:MM)\n"
     "  using the current date provided below.\n"
@@ -36,8 +39,12 @@ TOOL_CALLING_SYSTEM_PROMPT = (
     "  the newest user message follows 'Current request:'.\n"
     "- When a 'Relevant stored memories:' section is present, use it to\n"
     "  answer questions about saved facts and never invent memories.\n"
+    "- When 'Previous tool actions' with observations are present, use them\n"
+    "  and either request exactly one more tool or give the final plain-text\n"
+    "  answer.\n"
     '- If the request does not match any tool, reply {"tool": null, "arguments": {}}.\n'
-    "- Never invent tools or arguments, and never add explanations or markdown.\n"
+    "- Never invent tools or arguments, and never add explanations or\n"
+    "  markdown to a tool request.\n"
     "SIRIUS itself confirms every destructive action with the user; you never\n"
     "execute anything."
 )

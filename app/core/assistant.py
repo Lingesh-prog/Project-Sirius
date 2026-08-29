@@ -2,6 +2,7 @@
 
 from datetime import datetime
 
+from app.core.agent.loop import run_agent_loop
 from app.core.context_assembly import assemble_context
 from app.core.intents import (
     ADD_REMINDER,
@@ -18,21 +19,10 @@ from app.core.intents import (
     route_command,
 )
 from app.core.memory_context import collect_relevant_memories
-from app.core.response_handler import handle_ai_interaction
 from app.core.tools import (
     TOOL_MEMORY_DELETE,
-    TOOL_MEMORY_LIST,
-    TOOL_MEMORY_SAVE,
-    TOOL_MEMORY_SEARCH,
-    TOOL_REMINDERS_ADD,
-    TOOL_REMINDERS_COMPLETE,
     TOOL_REMINDERS_DELETE,
-    TOOL_REMINDERS_LIST,
-    TOOL_TASKS_ADD,
-    TOOL_TASKS_COMPLETE,
     TOOL_TASKS_DELETE,
-    TOOL_TASKS_LIST,
-    TOOL_TASKS_UPDATE,
     build_tool_catalog,
 )
 from app.tools.memory import service as memory_service
@@ -197,93 +187,12 @@ def _handle_ai_request(command, ai_client, database_path, conversation=None):
         today=datetime.now().strftime("%Y-%m-%d (%A)"),
     )
 
-    return handle_ai_interaction(
+    return run_agent_loop(
         ai_client=ai_client,
         context=context,
         database_path=database_path,
-        execute_tool_fn=_execute_tool,
         build_confirmation_fn=_build_destructive_confirmation,
     )
-
-
-def _execute_tool(tool, arguments, database_path):
-    """Run a validated, non-destructive tool through the existing services."""
-    if tool == TOOL_TASKS_ADD:
-        task_id = service.add_task(
-            arguments["title"],
-            description=arguments.get("description", ""),
-            due_date=arguments.get("due_date"),
-            priority=arguments.get("priority", "Medium"),
-            database_path=database_path,
-        )
-        return f"Task created successfully! ID: {task_id}"
-
-    if tool == TOOL_TASKS_LIST:
-        return format_tasks(service.get_tasks(database_path=database_path))
-
-    if tool == TOOL_TASKS_COMPLETE:
-        if service.complete_task(arguments["task_id"], database_path=database_path):
-            return "Task completed!"
-        return "Task not found."
-
-    if tool == TOOL_TASKS_UPDATE:
-        task_id = arguments.pop("task_id")
-        try:
-            if service.update_task(task_id, database_path=database_path, **arguments):
-                return "Task updated."
-            return "Task not found."
-        except ValueError as error:
-            return f"Task not updated. {error}"
-
-    if tool == TOOL_REMINDERS_ADD:
-        try:
-            reminder_id = reminder_service.create_reminder(
-                arguments["text"], arguments["remind_at"], database_path=database_path
-            )
-        except ValueError as error:
-            return f"Reminder not created. {error}"
-        return f"Reminder created successfully! ID: {reminder_id}"
-
-    if tool == TOOL_REMINDERS_LIST:
-        return format_reminders(
-            reminder_service.list_reminders(database_path=database_path)
-        )
-
-    if tool == TOOL_REMINDERS_COMPLETE:
-        if reminder_service.mark_reminder_completed(
-            arguments["reminder_id"], database_path=database_path
-        ):
-            return "Reminder completed!"
-        return "Reminder not found."
-
-    if tool == TOOL_MEMORY_SAVE:
-        try:
-            memory_id = memory_service.save_memory(
-                arguments["key"], arguments["value"], database_path=database_path
-            )
-        except ValueError as error:
-            return f"Memory not saved. {error}"
-        return f"Memory saved with ID: {memory_id}."
-
-    if tool == TOOL_MEMORY_LIST:
-        return format_memories(
-            memory_service.list_memories(database_path=database_path)
-        )
-
-    if tool == TOOL_MEMORY_SEARCH:
-        try:
-            memories = memory_service.search_memories(
-                arguments["query"], database_path=database_path
-            )
-        except ValueError as error:
-            return f"Memory search failed. {error}"
-        if not memories:
-            return "No matching memories found."
-        return format_memories(memories)
-
-    # Destructive tools never reach the executor; they always stop at the
-    # confirmation layer above. This line is defense in depth.
-    return UNKNOWN_COMMAND_MESSAGE
 
 
 def _build_destructive_confirmation(tool, arguments, database_path):
@@ -300,10 +209,14 @@ def _build_destructive_confirmation(tool, arguments, database_path):
         reminder_id = arguments["reminder_id"]
         target = _describe_reminder(reminder_id, database_path)
         confirm_command = f"confirm delete reminder {reminder_id}"
-    else:
+    elif tool == TOOL_MEMORY_DELETE:
         memory_id = arguments["memory_id"]
         target = _describe_memory(memory_id, database_path)
         confirm_command = f"confirm delete memory {memory_id}"
+    else:
+        # Defense in depth: only the three known destructive tools can get
+        # here; anything else is never confirmed or executed.
+        return UNKNOWN_COMMAND_MESSAGE
 
     return (
         f"You asked me to delete {target}. This cannot be undone.\n"

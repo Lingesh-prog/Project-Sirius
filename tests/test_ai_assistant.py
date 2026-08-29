@@ -363,13 +363,25 @@ class AIAssistantTests(unittest.TestCase):
 
     def test_context_stays_bounded_across_exchanges(self):
         context = ConversationContext(max_messages=2)
-        client = FakeAIClient(replies=[tool_reply("tasks.list", {})] * 3)
+        client = FakeAIClient(
+            replies=[
+                tool_reply("tasks.list", {}),
+                "first answer",
+                tool_reply("tasks.list", {}),
+                "second answer",
+                tool_reply("tasks.list", {}),
+                "third answer",
+            ]
+        )
 
         self.command("first request", ai_client=client, conversation=context)
         self.command("second request", ai_client=client, conversation=context)
         self.command("third request", ai_client=client, conversation=context)
 
-        history = client.conversations[2]
+        # The agent loop calls the AI once per step, and every exchange here
+        # consumes one read-only tool call plus one final answer, so the first
+        # call of the third exchange is entry 4 (0-based).
+        history = client.conversations[4]
         self.assertIsNotNone(history)
         self.assertNotIn("first request", history)
         self.assertIn("second request", history)

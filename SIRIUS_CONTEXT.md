@@ -20,7 +20,8 @@ SIRIUS is one personal assistant application composed of small, independent modu
 - Module 2.7: Context assembly layer (deterministic, clearly separated sections for AI requests) — COMPLETE
 - Module 2.8: Reliability and response-handling layer (natural language answers, tool dispatch, graceful error handling) — COMPLETE
 - Module 2 (AI Intelligence & Memory Foundation) — COMPLETE
-- Current test count: 265 passing
+- Module 3.1: Multi-step agent execution loop (core.tool_registry + core.agent) — COMPLETE
+- Current test count: 324 passing
 
 ## Current architecture
 
@@ -48,13 +49,17 @@ tools.reminders.scheduler → background polling → tools.reminders.service
 app.ai (AIClient abstraction → create_ai_client() factory → GeminiClient;
 google-genai SDK imported lazily and only inside app.ai.client)
 
-AI natural-language path:
+AI natural-language path (multi-step agent loop):
 core.assistant → core.context_assembly (coordinates memories + bounded transcript + prompt)
-  → app.ai client → core.response_handler (contract: tools, natural language, fallbacks)
+  → core.agent (bounded loop: Plan → Tool call → Observation → Next step → Final
+    response; max 5 steps, one tool action per step, observations fed back)
+  → core.tool_registry (safety tiers: read_only / state_modifying / destructive)
   → core.tools (parse + validation/safety)
   → tools.*.service → repository → SQLite
-  Destructive tool requests stop at the confirmation layer and are executed
-  only after the user replies with a deterministic confirm command.
+  Natural-language replies end the loop cleanly. State-modifying tools execute
+  once and return their service result. Destructive tool requests halt the
+  loop immediately, are never executed by the AI path, and run only after the
+  user replies with a deterministic confirm command.
   Conversation context is memory-only and disappears when the process exits.
   Persistent memories are written only via the explicit memory.save tool.
 ```
@@ -65,7 +70,9 @@ core.assistant → core.context_assembly (coordinates memories + bounded transcr
 project-sirius/
 ├── app/
 │   ├── ai/                   # AI client abstraction, provider + prompts
-│   ├── core/                 # assistant, intents, context and tool safety layer
+│   ├── core/                 # assistant, intents, context, agent loop and tool safety layer
+│   │   ├── agent/            # bounded multi-step agent execution loop
+│   │   └── tool_registry.py  # OO tool specs + safety tiers over core.tools
 │   ├── storage/              # SQLite setup
 │   ├── tools/tasks/          # task service and repository
 │   ├── tools/reminders/      # reminder service, repository and scheduler
@@ -74,6 +81,7 @@ project-sirius/
 │   └── main.py
 ├── tests/
 │   ├── test_ai.py
+│   ├── test_agent_loop.py
 │   ├── test_ai_assistant.py
 │   ├── test_assistant.py
 │   ├── test_context_assembly.py
@@ -85,6 +93,7 @@ project-sirius/
 │   ├── test_response_handler.py
 │   ├── test_scheduler.py
 │   ├── test_tasks.py
+│   ├── test_tool_registry.py
 │   └── test_tools.py
 ├── .env.example              # AI settings template (never commit the real .env)
 ├── requirements.txt
@@ -153,6 +162,18 @@ project-sirius/
   graceful error fallbacks (provider errors, empty responses, malformed JSON,
   multiple tool requests, unexpected exceptions) without leaking internal stack
   traces or giving the AI execution authority.
+- Module 3.1 adds the agentic execution layer. `core.tool_registry` gives the
+  13 core.tools tools an object-oriented Tool/ToolRegistry view with a
+  SafetyTier (read_only, state_modifying, destructive); validation always goes
+  through the shared core.tools layer, so custom names can never bypass it.
+  `core.agent` runs a bounded multi-step loop (Plan -> Tool call -> Observation
+  -> Next step -> Final response, default max 5 steps, one tool action per
+  step). Read-only observations are fed back so the AI can chain lookups or
+  finish with a plain-text answer; state-modifying tools execute once and
+  return their service result; destructive tools halt the loop immediately for
+  human confirmation and are never executed by the AI path. The AI path now
+  routes through this loop; deterministic commands, the confirmation flow, and
+  the response contract are unchanged.
 
 ## Development roadmap
 
@@ -162,16 +183,17 @@ project-sirius/
 - Step 4 Reminders + lightweight scheduler ✓ — Module 1 (Sirius Focus) complete
 - Step 5 LLM integration ✓ — Module 2 (2.1-2.8 AI Intelligence & Memory Foundation) complete
 - Step 6 Memory ✓ — Module 2.5 foundation, 2.6 retrieval, 2.7 context, 2.8 reliability complete
-- Step 7 Voice — Module 3 (NOT started / planned next)
+- Step 7 Agentic execution ✓ — Module 3.1 (multi-step agent loop + tool registry) complete; Voice is a later module
 - Step 8 Automation
 - Step 9 External integrations
 
 > [!NOTE]
-> Module 3 has NOT been started. Module 2 is fully complete and validated.
+> Module 3.1 (multi-step agent execution loop) is complete and validated
+> (324 passing tests). Module 3.2 has NOT been started.
 
 ## Stable Git checkpoint
 
-`140167f` — `Add SIRIUS assistant core and intent routing`
+`8cd689f` — `Complete SIRIUS AI intelligence foundation`
 
 ## Development rule
 
