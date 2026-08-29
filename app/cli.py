@@ -131,4 +131,13 @@ def run():
             print("Goodbye.")
             break
         else:
-            print(f"\n{handle_command(choice, ai_client=ai_client, conversation=conversation)}")
+            agent_trace = []
+            response = handle_command(
+                choice,
+                ai_client=ai_client,
+                conversation=conversation,
+                agent_trace=agent_trace,
+            )
+            for trace_block in agent_trace:
+                print(f"\n{trace_block}")
+            print(f"\n{response}")

@@ -359,7 +359,7 @@ class AgentLoopTests(unittest.TestCase):
         client = ScriptedAgentClient(
             replies=[
                 tool_json("tasks.list"),
-                tool_json("tasks.list"),
+                tool_json("memory.list"),
                 "unused final answer",
             ]
         )
@@ -367,9 +367,12 @@ class AgentLoopTests(unittest.TestCase):
 
         response = loop.run(make_context("What are my tasks?"))
 
-        self.assertIn("[1] Buy milk", response)
+        self.assertEqual(response, "No memories found.")
         self.assertEqual(client.calls, 2)
         self.assertEqual(client.replies, ["unused final answer"])
+        self.assertEqual(
+            [step.tool_name for step in loop.steps], ["tasks.list", "memory.list"]
+        )
 
     def test_default_max_steps_is_five(self):
         self.assertEqual(DEFAULT_MAX_STEPS, 5)

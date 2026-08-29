@@ -9,6 +9,11 @@ execution cycle with safety boundaries:
    require explicit human confirmation.
 5. Natural-language answers terminate the loop cleanly without state mutation.
 6. The AI never gains arbitrary execution authority.
+7. Repeated identical (tool, arguments) calls within one run are never
+   re-executed (Module 3.2); the observation already produced is returned.
+8. Every run exposes a deterministic, compact step trace (render_trace()).
+9. Observations fed back into follow-up steps are size-bounded
+   (max_observation_chars) so the per-run context stays finite.
 """
 
 import json
@@ -31,6 +36,10 @@ from app.core.tools import (
 )
 
 DEFAULT_MAX_STEPS = 5
+DEFAULT_MAX_OBSERVATION_CHARS = 1200
+OBSERVATION_TRUNCATION_MARKER = "\n... [observation truncated]"
+AGENT_TRACE_HEADER = "========== AGENT TRACE =========="
+AGENT_TRACE_FOOTER = "================================="
 
 
 class AgentStep:
@@ -44,6 +53,7 @@ class AgentStep:
         observation: Optional[str] = None,
         is_final: bool = False,
         final_response: Optional[str] = None,
+        skipped_repeat: bool = False,
     ):
         self.step_number = step_number
         self.tool_name = tool_name
@@ -51,8 +61,14 @@ class AgentStep:
         self.observation = observation
         self.is_final = is_final
         self.final_response = final_response
+        self.skipped_repeat = skipped_repeat
 
     def __repr__(self) -> str:
+        if self.skipped_repeat:
+            return (
+                f"AgentStep(step={self.step_number}, "
+                f"skipped repeat of {self.tool_name!r})"
+            )
         if self.is_final:
             return f"AgentStep(step={self.step_number}, final={self.final_response!r})"
         return f"AgentStep(step={self.step_number}, tool={self.tool_name!r})"
@@ -66,15 +82,25 @@ class AgentLoop:
         ai_client,
         tool_registry: Optional[ToolRegistry] = None,
         max_steps: int = DEFAULT_MAX_STEPS,
+        max_observation_chars: int = DEFAULT_MAX_OBSERVATION_CHARS,
         database_path: Optional[str] = None,
         build_confirmation_fn: Optional[Callable] = None,
     ):
         if not isinstance(max_steps, int) or isinstance(max_steps, bool) or max_steps < 1:
             raise ValueError("max_steps must be a whole number of at least 1.")
+        if (
+            not isinstance(max_observation_chars, int)
+            or isinstance(max_observation_chars, bool)
+            or max_observation_chars < 1
+        ):
+            raise ValueError(
+                "max_observation_chars must be a whole number of at least 1."
+            )
 
         self.ai_client = ai_client
         self.tool_registry = tool_registry or build_default_registry()
         self.max_steps = max_steps
+        self.max_observation_chars = max_observation_chars
         self.database_path = database_path
         self.build_confirmation_fn = build_confirmation_fn
         self.steps: List[AgentStep] = []
@@ -83,6 +109,7 @@ class AgentLoop:
         """Run the multi-step agent reasoning loop for the given assembled context."""
         self.steps = []
         last_observation = None
+        executed_calls: dict = {}
 
         for step_num in range(1, self.max_steps + 1):
             # Compose prompt for current step
@@ -176,11 +203,29 @@ class AgentLoop:
                     )
                 return f"Destructive tool '{tool_name}' requires confirmation."
 
+            # Repetition guard (Module 3.2): never re-execute an identical
+            # (tool, arguments) call within one run; the observation that call
+            # already produced is deterministic for this run, so return it.
+            call_key = _canonical_call_key(tool_name, validated_args)
+            if call_key in executed_calls:
+                prior_observation = executed_calls[call_key]
+                self.steps.append(
+                    AgentStep(
+                        step_number=step_num,
+                        tool_name=tool_name,
+                        arguments=validated_args,
+                        observation=prior_observation,
+                        skipped_repeat=True,
+                    )
+                )
+                return prior_observation
+
             # Execute tool
             observation = str(
                 tool.execute(validated_args, database_path=self.database_path)
             )
             last_observation = observation
+            executed_calls[call_key] = observation
             self.steps.append(
                 AgentStep(
                     step_number=step_num,
@@ -211,13 +256,56 @@ class AgentLoop:
         lines = [f"Current request: {user_request}", "\nPrevious tool actions:"]
         for s in completed_steps:
             lines.append(
-                f"- Step {s.step_number}: Called {s.tool_name}({json.dumps(s.arguments)})\n"
-                f"  Observation: {s.observation}"
+                f"- Step {s.step_number}: Called {s.tool_name}"
+                f"({json.dumps(s.arguments, sort_keys=True)})\n"
+                f"  Observation: {self._bounded_observation(s.observation)}"
             )
         lines.append(
             "\nBased on the observations above, decide the next tool action or provide your final response."
         )
         return "\n".join(lines)
+
+    def _bounded_observation(self, observation):
+        """Bound an observation's size before it is fed back to the AI."""
+        if observation is None:
+            return ""
+        text = str(observation)
+        if len(text) <= self.max_observation_chars:
+            return text
+        return text[: self.max_observation_chars] + OBSERVATION_TRUNCATION_MARKER
+
+    def render_trace(self) -> str:
+        """Render a deterministic, compact trace of this run's steps."""
+        if not self.steps:
+            return ""
+
+        lines = [AGENT_TRACE_HEADER]
+        for step in self.steps:
+            if step.is_final:
+                lines.append(f"[{step.step_number}] final response")
+                continue
+            suffix = " (skipped: repeated call)" if step.skipped_repeat else ""
+            lines.append(
+                f"[{step.step_number}] {step.tool_name}"
+                f"({_format_trace_arguments(step.arguments)}){suffix}"
+            )
+        lines.append(AGENT_TRACE_FOOTER)
+        return "\n".join(lines)
+
+
+def _canonical_call_key(tool_name, validated_args):
+    """Build an order-independent identity for one tool call."""
+    return json.dumps([tool_name, validated_args], sort_keys=True)
+
+
+def _format_trace_arguments(arguments):
+    """Render validated arguments compactly for the agent trace."""
+    if not arguments:
+        return ""
+    return ", ".join(
+        f"{key}={json.dumps(value, sort_keys=True)}"
+        for key, value in sorted(arguments.items())
+    )
 
 
 def run_agent_loop(
@@ -226,6 +314,7 @@ def run_agent_loop(
     database_path: Optional[str] = None,
     tool_registry: Optional[ToolRegistry] = None,
     max_steps: int = DEFAULT_MAX_STEPS,
+    max_observation_chars: int = DEFAULT_MAX_OBSERVATION_CHARS,
     build_confirmation_fn: Optional[Callable] = None,
 ) -> str:
     """Execute the multi-step agent reasoning loop."""
@@ -233,6 +322,7 @@ def run_agent_loop(
         ai_client=ai_client,
         tool_registry=tool_registry,
         max_steps=max_steps,
+        max_observation_chars=max_observation_chars,
         database_path=database_path,
         build_confirmation_fn=build_confirmation_fn,
     )

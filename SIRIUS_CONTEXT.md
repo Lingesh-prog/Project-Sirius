@@ -21,7 +21,8 @@ SIRIUS is one personal assistant application composed of small, independent modu
 - Module 2.8: Reliability and response-handling layer (natural language answers, tool dispatch, graceful error handling) — COMPLETE
 - Module 2 (AI Intelligence & Memory Foundation) — COMPLETE
 - Module 3.1: Multi-step agent execution loop (core.tool_registry + core.agent) — COMPLETE
-- Current test count: 324 passing
+- Module 3.2: Agent-loop hardening and observability (repetition guard, agent trace, per-run budget) — COMPLETE
+- Current test count: 344 passing
 
 ## Current architecture
 
@@ -52,14 +53,18 @@ google-genai SDK imported lazily and only inside app.ai.client)
 AI natural-language path (multi-step agent loop):
 core.assistant → core.context_assembly (coordinates memories + bounded transcript + prompt)
   → core.agent (bounded loop: Plan → Tool call → Observation → Next step → Final
-    response; max 5 steps, one tool action per step, observations fed back)
+    response; max 5 steps, one tool action per step, observations fed back;
+    identical repeated tool calls are never re-executed; observations fed back
+    are size-bounded per run; each run exposes a deterministic step trace)
   → core.tool_registry (safety tiers: read_only / state_modifying / destructive)
   → core.tools (parse + validation/safety)
   → tools.*.service → repository → SQLite
   Natural-language replies end the loop cleanly. State-modifying tools execute
   once and return their service result. Destructive tool requests halt the
   loop immediately, are never executed by the AI path, and run only after the
-  user replies with a deterministic confirm command.
+  user replies with a deterministic confirm command. The CLI can print the
+  agent's step trace (opt-in via handle_command(agent_trace=...)); destructive
+  confirmation turns produce no trace because the loop records no steps.
   Conversation context is memory-only and disappears when the process exits.
   Persistent memories are written only via the explicit memory.save tool.
 ```
@@ -81,6 +86,7 @@ project-sirius/
 │   └── main.py
 ├── tests/
 │   ├── test_ai.py
+│   ├── test_agent_guardrails.py
 │   ├── test_agent_loop.py
 │   ├── test_ai_assistant.py
 │   ├── test_assistant.py
@@ -174,6 +180,19 @@ project-sirius/
   human confirmation and are never executed by the AI path. The AI path now
   routes through this loop; deterministic commands, the confirmation flow, and
   the response contract are unchanged.
+- Module 3.2 hardens the agent loop and makes it observable. A repetition
+  guard never re-executes an identical (tool, validated arguments) call within
+  one run; the observation already produced is returned instead and the step
+  is recorded as a skipped repeat (argument order cannot defeat the guard).
+  AgentLoop.render_trace() renders a deterministic, compact per-run trace
+  ([n] tool(arguments), skipped markers, "final response"); the assistant
+  appends it to an optional agent_trace list on AI turns only, and the CLI
+  prints it before the answer. A per-run observation budget
+  (max_observation_chars, default 1200) bounds how much observation text is
+  fed back into follow-up prompts, with an explicit "[observation truncated]"
+  marker; full observations are still recorded on the step. No new
+  dependencies, no schema changes, and all validation, safety-tier, and
+  confirmation rules are unchanged.
 
 ## Development roadmap
 
@@ -183,13 +202,13 @@ project-sirius/
 - Step 4 Reminders + lightweight scheduler ✓ — Module 1 (Sirius Focus) complete
 - Step 5 LLM integration ✓ — Module 2 (2.1-2.8 AI Intelligence & Memory Foundation) complete
 - Step 6 Memory ✓ — Module 2.5 foundation, 2.6 retrieval, 2.7 context, 2.8 reliability complete
-- Step 7 Agentic execution ✓ — Module 3.1 (multi-step agent loop + tool registry) complete; Voice is a later module
+- Step 7 Agentic execution ✓ — Module 3.1 (multi-step agent loop + tool registry) and Module 3.2 (hardening + observability) complete; Voice is a later module
 - Step 8 Automation
 - Step 9 External integrations
 
 > [!NOTE]
-> Module 3.1 (multi-step agent execution loop) is complete and validated
-> (324 passing tests). Module 3.2 has NOT been started.
+> Module 3.2 (agent-loop hardening and observability) is complete and
+> validated (344 passing tests). Module 3.3 has NOT been started.
 
 ## Stable Git checkpoint
 

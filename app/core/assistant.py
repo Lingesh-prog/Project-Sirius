@@ -2,7 +2,7 @@
 
 from datetime import datetime
 
-from app.core.agent.loop import run_agent_loop
+from app.core.agent.loop import AgentLoop
 from app.core.context_assembly import assemble_context
 from app.core.intents import (
     ADD_REMINDER,
@@ -88,13 +88,21 @@ def format_memories(memories):
     return "\n".join(lines)
 
 
-def handle_command(command, database_path=None, ai_client=None, conversation=None):
-    """Execute one command and record the exchange in the conversation context."""
+def handle_command(
+    command, database_path=None, ai_client=None, conversation=None, agent_trace=None
+):
+    """Execute one command and record the exchange in the conversation context.
+
+    When *agent_trace* is a list and the AI agent path runs, one deterministic
+    rendered trace of the agent's steps is appended to it. Deterministic
+    commands never touch it.
+    """
     response = _resolve_command(
         command,
         database_path=database_path,
         ai_client=ai_client,
         conversation=conversation,
+        agent_trace=agent_trace,
     )
 
     if conversation is not None:
@@ -104,7 +112,9 @@ def handle_command(command, database_path=None, ai_client=None, conversation=Non
     return response
 
 
-def _resolve_command(command, database_path=None, ai_client=None, conversation=None):
+def _resolve_command(
+    command, database_path=None, ai_client=None, conversation=None, agent_trace=None
+):
     """Route and execute one command without touching conversation context."""
     intent = route_command(command)
 
@@ -165,19 +175,27 @@ def _resolve_command(command, database_path=None, ai_client=None, conversation=N
             return "Memory deleted."
         return "Memory not found."
 
-    return _handle_unrecognized(command, ai_client, database_path, conversation)
+    return _handle_unrecognized(
+        command, ai_client, database_path, conversation, agent_trace
+    )
 
 
-def _handle_unrecognized(command, ai_client, database_path, conversation=None):
+def _handle_unrecognized(
+    command, ai_client, database_path, conversation=None, agent_trace=None
+):
     """Route unrecognized input to the AI tool path when AI is configured."""
     if ai_client is None:
         return UNKNOWN_COMMAND_MESSAGE
 
-    return _handle_ai_request(command, ai_client, database_path, conversation)
+    return _handle_ai_request(
+        command, ai_client, database_path, conversation, agent_trace
+    )
 
 
-def _handle_ai_request(command, ai_client, database_path, conversation=None):
-    """Turn natural language into a validated tool request and run it safely."""
+def _handle_ai_request(
+    command, ai_client, database_path, conversation=None, agent_trace=None
+):
+    """Turn natural language into validated agent steps and run them safely."""
     memories = collect_relevant_memories(command, database_path=database_path)
     context = assemble_context(
         user_request=command,
@@ -187,12 +205,19 @@ def _handle_ai_request(command, ai_client, database_path, conversation=None):
         today=datetime.now().strftime("%Y-%m-%d (%A)"),
     )
 
-    return run_agent_loop(
+    loop = AgentLoop(
         ai_client=ai_client,
-        context=context,
         database_path=database_path,
         build_confirmation_fn=_build_destructive_confirmation,
     )
+    response = loop.run(context)
+
+    if agent_trace is not None:
+        trace = loop.render_trace()
+        if trace:
+            agent_trace.append(trace)
+
+    return response
 
 
 def _build_destructive_confirmation(tool, arguments, database_path):

@@ -42,6 +42,8 @@ TOOL_CALLING_SYSTEM_PROMPT = (
     "- When 'Previous tool actions' with observations are present, use them\n"
     "  and either request exactly one more tool or give the final plain-text\n"
     "  answer.\n"
+    "- Never repeat a tool call that appears under 'Previous tool actions';\n"
+    "  use its recorded observation instead.\n"
     '- If the request does not match any tool, reply {"tool": null, "arguments": {}}.\n'
     "- Never invent tools or arguments, and never add explanations or\n"
     "  markdown to a tool request.\n"
