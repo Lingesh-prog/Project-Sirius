@@ -22,7 +22,8 @@ SIRIUS is one personal assistant application composed of small, independent modu
 - Module 2 (AI Intelligence & Memory Foundation) — COMPLETE
 - Module 3.1: Multi-step agent execution loop (core.tool_registry + core.agent) — COMPLETE
 - Module 3.2: Agent-loop hardening and observability (repetition guard, agent trace, per-run budget) — COMPLETE
-- Current test count: 344 passing
+- Module 3.3: Safe automation foundation (automation.open_url + automation.launch_app behind the existing agent loop, registry, and validation layers) — COMPLETE
+- Current test count: 384 passing
 
 ## Current architecture
 
@@ -59,6 +60,12 @@ core.assistant → core.context_assembly (coordinates memories + bounded transcr
   → core.tool_registry (safety tiers: read_only / state_modifying / destructive)
   → core.tools (parse + validation/safety)
   → tools.*.service → repository → SQLite
+  Automation requests (automation.open_url, automation.launch_app) follow the
+  same loop, registry, and validation layers and end in
+  tools.automation.service → OS/browser; only validated http/https URLs and
+  the fixed Windows allowlist (Notepad, Calculator) can ever be launched,
+  both automation tools are state_modifying, and the service re-checks both
+  rules at the OS boundary.
   Natural-language replies end the loop cleanly. State-modifying tools execute
   once and return their service result. Destructive tool requests halt the
   loop immediately, are never executed by the AI path, and run only after the
@@ -82,12 +89,14 @@ project-sirius/
 │   ├── tools/tasks/          # task service and repository
 │   ├── tools/reminders/      # reminder service, repository and scheduler
 │   ├── tools/memory/         # memory service and repository
+│   ├── tools/automation/     # safe automation service (browser + allowlisted apps)
 │   ├── cli.py
 │   └── main.py
 ├── tests/
 │   ├── test_ai.py
 │   ├── test_agent_guardrails.py
 │   ├── test_agent_loop.py
+│   ├── test_automation.py
 │   ├── test_ai_assistant.py
 │   ├── test_assistant.py
 │   ├── test_context_assembly.py
@@ -193,6 +202,23 @@ project-sirius/
   marker; full observations are still recorded on the step. No new
   dependencies, no schema changes, and all validation, safety-tier, and
   confirmation rules are unchanged.
+- Module 3.3 adds a small, explicitly registered automation layer.
+  app/tools/automation is the only layer that touches the OS and exposes two
+  fixed actions: automation.open_url opens well-formed http/https URLs in the
+  default browser (file, javascript, data, and custom protocol schemes are
+  rejected), and automation.launch_app starts only identifiers from a fixed
+  Windows-safe allowlist (Notepad, Calculator) through their fixed
+  executables -- never paths, shell commands, arguments, or arbitrary
+  executables. Both tools are SafetyTier.STATE_MODIFYING because they cause
+  external side effects, both are registered in the existing
+  core.tool_registry, and every request is validated by the existing
+  core.tools layer (new url and app argument kinds) before the service runs;
+  the AI never calls the automation service directly. The service re-checks
+  both rules at the OS boundary (defense in depth), launchers are injectable
+  so tests never open real browsers or applications, failures become clean
+  user-facing observations, and the registry now carries 15 tools. No new
+  dependencies, no schema changes, and all existing confirmation,
+  repetition-guard, budget, and trace behavior is unchanged.
 
 ## Development roadmap
 
@@ -203,16 +229,16 @@ project-sirius/
 - Step 5 LLM integration ✓ — Module 2 (2.1-2.8 AI Intelligence & Memory Foundation) complete
 - Step 6 Memory ✓ — Module 2.5 foundation, 2.6 retrieval, 2.7 context, 2.8 reliability complete
 - Step 7 Agentic execution ✓ — Module 3.1 (multi-step agent loop + tool registry) and Module 3.2 (hardening + observability) complete; Voice is a later module
-- Step 8 Automation
+- Step 8 Automation — Module 3.3 (safe automation foundation) complete; broader automation still ahead
 - Step 9 External integrations
 
 > [!NOTE]
-> Module 3.2 (agent-loop hardening and observability) is complete and
-> validated (344 passing tests). Module 3.3 has NOT been started.
+> Module 3.3 (safe automation foundation) is complete and validated
+> (384 passing tests). Module 3.4 has NOT been started.
 
 ## Stable Git checkpoint
 
-`8cd689f` — `Complete SIRIUS AI intelligence foundation`
+`3a95f7b` — `Harden and add observability to SIRIUS agent loop`
 
 ## Development rule
 

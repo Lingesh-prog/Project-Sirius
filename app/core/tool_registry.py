@@ -4,7 +4,7 @@ Provides:
 - SafetyTier (READ_ONLY, STATE_MODIFYING, DESTRUCTIVE)
 - Tool specification containing metadata, argument schema, safety tier, and executor
 - ToolRegistry for dynamic registration, validation, and execution of tools
-- build_default_registry() pre-configured with all 13 standard SIRIUS tools
+- build_default_registry() pre-configured with all 15 standard SIRIUS tools
 """
 
 from enum import Enum
@@ -12,7 +12,10 @@ from typing import Any, Callable, Dict, List, Optional
 
 from app.core.tools import (
     DESTRUCTIVE_TOOLS,
+    SAFE_AUTOMATION_APPS,
     TOOL_ARGUMENT_SPECS,
+    TOOL_AUTOMATION_LAUNCH_APP,
+    TOOL_AUTOMATION_OPEN_URL,
     TOOL_MEMORY_DELETE,
     TOOL_MEMORY_LIST,
     TOOL_MEMORY_SAVE,
@@ -29,6 +32,7 @@ from app.core.tools import (
     ToolValidationError,
     validate_tool_request,
 )
+from app.tools.automation import service as automation_service
 from app.tools.memory import service as memory_service
 from app.tools.reminders import service as reminder_service
 from app.tools.tasks import service as task_service
@@ -175,7 +179,7 @@ def _format_memories(memories):
 
 
 def build_default_registry() -> ToolRegistry:
-    """Construct a ToolRegistry containing all 13 standard SIRIUS tools."""
+    """Construct a ToolRegistry containing all 15 standard SIRIUS tools."""
     registry = ToolRegistry()
 
     # Tasks tools
@@ -391,6 +395,56 @@ def build_default_registry() -> ToolRegistry:
                 )
                 else "Memory not found."
             ),
+        )
+    )
+
+    # Automation tools (Module 3.3): they cause external side effects, so
+    # they are state modifying and execute once per run. The AI can only
+    # request these two fixed actions; every request is validated by the
+    # shared core.tools layer before the automation service runs, and the
+    # service re-checks both rules at the OS boundary.
+
+    def _exec_open_url(args, database_path=None):
+        url = args["url"]
+        try:
+            opened = automation_service.open_url(url)
+        except ValueError as error:
+            return f"Link not opened. {error}"
+        if opened:
+            return f"Opening {url} in your default browser."
+        return f"Could not open {url} in your default browser."
+
+    registry.register(
+        Tool(
+            name=TOOL_AUTOMATION_OPEN_URL,
+            description="Open an http or https URL in the user's default browser.",
+            argument_spec=TOOL_ARGUMENT_SPECS[TOOL_AUTOMATION_OPEN_URL],
+            safety_tier=SafetyTier.STATE_MODIFYING,
+            executor=_exec_open_url,
+        )
+    )
+
+    def _exec_launch_app(args, database_path=None):
+        app = args["app"]
+        try:
+            launched = automation_service.launch_app(app)
+        except ValueError as error:
+            return f"Application not launched. {error}"
+        display_name = SAFE_AUTOMATION_APPS.get(app, {}).get("display_name", app)
+        if launched:
+            return f"Launching {display_name}."
+        return f"Could not launch {display_name}."
+
+    registry.register(
+        Tool(
+            name=TOOL_AUTOMATION_LAUNCH_APP,
+            description=(
+                "Launch one of the allowlisted applications "
+                "(currently Notepad and Calculator)."
+            ),
+            argument_spec=TOOL_ARGUMENT_SPECS[TOOL_AUTOMATION_LAUNCH_APP],
+            safety_tier=SafetyTier.STATE_MODIFYING,
+            executor=_exec_launch_app,
         )
     )
 

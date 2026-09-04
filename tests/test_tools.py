@@ -5,6 +5,8 @@ import unittest
 
 from app.core.tools import (
     DESTRUCTIVE_TOOLS,
+    TOOL_AUTOMATION_LAUNCH_APP,
+    TOOL_AUTOMATION_OPEN_URL,
     TOOL_MEMORY_DELETE,
     TOOL_MEMORY_LIST,
     TOOL_MEMORY_SAVE,
@@ -228,7 +230,7 @@ class ToolSafetyTests(unittest.TestCase):
             {TOOL_TASKS_DELETE, TOOL_REMINDERS_DELETE, TOOL_MEMORY_DELETE},
         )
 
-    def test_catalog_lists_all_thirteen_tools(self):
+    def test_catalog_lists_all_fifteen_tools(self):
         catalog = build_tool_catalog()
 
         for tool in (
@@ -245,6 +247,8 @@ class ToolSafetyTests(unittest.TestCase):
             "memory.list",
             "memory.search",
             "memory.delete",
+            "automation.open_url",
+            "automation.launch_app",
         ):
             with self.subTest(tool=tool):
                 self.assertIn(tool, catalog)

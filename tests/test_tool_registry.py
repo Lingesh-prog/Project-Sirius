@@ -18,6 +18,8 @@ from app.core.tool_registry import (
 from app.core.tools import (
     DESTRUCTIVE_TOOLS,
     TOOL_ARGUMENT_SPECS,
+    TOOL_AUTOMATION_LAUNCH_APP,
+    TOOL_AUTOMATION_OPEN_URL,
     TOOL_MEMORY_DELETE,
     TOOL_MEMORY_LIST,
     TOOL_MEMORY_SAVE,
@@ -53,6 +55,8 @@ EXPECTED_SAFETY_TIERS = {
     TOOL_MEMORY_LIST: SafetyTier.READ_ONLY,
     TOOL_MEMORY_SEARCH: SafetyTier.READ_ONLY,
     TOOL_MEMORY_DELETE: SafetyTier.DESTRUCTIVE,
+    TOOL_AUTOMATION_OPEN_URL: SafetyTier.STATE_MODIFYING,
+    TOOL_AUTOMATION_LAUNCH_APP: SafetyTier.STATE_MODIFYING,
 }
 
 
@@ -67,8 +71,8 @@ class DefaultRegistryTests(unittest.TestCase):
     def setUp(self):
         self.registry = build_default_registry()
 
-    def test_contains_exactly_the_thirteen_standard_tools(self):
-        self.assertEqual(len(self.registry.list_tools()), 13)
+    def test_contains_exactly_the_fifteen_standard_tools(self):
+        self.assertEqual(len(self.registry.list_tools()), 15)
         self.assertEqual(set(self.registry.get_tool_names()), set(EXPECTED_SAFETY_TIERS))
 
     def test_every_tool_has_the_correct_safety_tier(self):

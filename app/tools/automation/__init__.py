@@ -1,0 +1,1 @@
+"""Safe automation tool for SIRIUS."""

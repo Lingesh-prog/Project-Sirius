@@ -4,11 +4,16 @@ The LLM can only *request* one of the tools defined here. Requests are parsed
 from the model's JSON reply and validated before any service is called.
 Destructive tools are never executed from the AI path; they always produce a
 user confirmation prompt instead.
+
+Automation tools (automation.open_url, automation.launch_app) are validated
+here as well: only well-formed http/https URLs and identifiers from the fixed
+application allowlist can ever pass this layer (Module 3.3).
 """
 
 from datetime import datetime
 import json
 import re
+from urllib.parse import urlsplit
 
 
 TOOL_TASKS_ADD = "tasks.add"
@@ -24,6 +29,8 @@ TOOL_MEMORY_SAVE = "memory.save"
 TOOL_MEMORY_LIST = "memory.list"
 TOOL_MEMORY_SEARCH = "memory.search"
 TOOL_MEMORY_DELETE = "memory.delete"
+TOOL_AUTOMATION_OPEN_URL = "automation.open_url"
+TOOL_AUTOMATION_LAUNCH_APP = "automation.launch_app"
 
 # Tools that permanently remove data. Requests for these from the AI path are
 # never executed directly; the user must confirm with an explicit command.
@@ -39,6 +46,8 @@ ID_ARGUMENT = "id"
 PRIORITY_ARGUMENT = "priority"
 DATETIME_ARGUMENT = "datetime"
 DATE_TEXT_ARGUMENT = "date_text"
+URL_ARGUMENT = "url"
+APP_ARGUMENT = "app"
 
 TOOL_ARGUMENT_SPECS = {
     TOOL_TASKS_ADD: {
@@ -71,9 +80,25 @@ TOOL_ARGUMENT_SPECS = {
     TOOL_MEMORY_LIST: {},
     TOOL_MEMORY_SEARCH: {"query": (True, TEXT_ARGUMENT)},
     TOOL_MEMORY_DELETE: {"memory_id": (True, ID_ARGUMENT)},
+    TOOL_AUTOMATION_OPEN_URL: {"url": (True, URL_ARGUMENT)},
+    TOOL_AUTOMATION_LAUNCH_APP: {"app": (True, APP_ARGUMENT)},
 }
 
 VALID_PRIORITIES = ("low", "medium", "high")
+
+# Module 3.3 safe automation allowlist: the only applications SIRIUS can
+# launch, each with its fixed Windows executable. Validation accepts exactly
+# these identifiers (case-insensitively) and nothing else -- no paths, no
+# shell commands, no arguments, and no arbitrary executables.
+SAFE_AUTOMATION_APPS = {
+    "notepad": {"display_name": "Notepad", "executable": "notepad.exe"},
+    "calculator": {"display_name": "Calculator", "executable": "calc.exe"},
+}
+
+# The only URL schemes the automation layer may open; every other scheme
+# (file, javascript, data, custom protocol handlers, ...) is rejected before
+# any OS call happens.
+ALLOWED_URL_SCHEMES = ("http", "https")
 
 
 class ToolValidationError(ValueError):
@@ -167,6 +192,8 @@ def build_tool_catalog():
         PRIORITY_ARGUMENT: "Low|Medium|High",
         DATETIME_ARGUMENT: "<YYYY-MM-DDTHH:MM>",
         DATE_TEXT_ARGUMENT: "<YYYY-MM-DD or text>",
+        URL_ARGUMENT: "<http or https URL>",
+        APP_ARGUMENT: "<allowlisted app>",
     }
 
     lines = []
@@ -224,4 +251,56 @@ def _coerce_argument(tool, name, kind, value):
             ) from error
         return value
 
+    if kind == URL_ARGUMENT:
+        if isinstance(value, bool) or not isinstance(value, str):
+            raise ToolValidationError(
+                f"Argument '{name}' of '{tool}' must be a URL string."
+            )
+        return _coerce_url(tool, name, value.strip())
+
+    if kind == APP_ARGUMENT:
+        if isinstance(value, bool) or not isinstance(value, str):
+            raise ToolValidationError(
+                f"Argument '{name}' of '{tool}' must be an application name."
+            )
+        identifier = value.strip().lower()
+        if identifier not in SAFE_AUTOMATION_APPS:
+            allowed = ", ".join(
+                f"{info['display_name']} ({app_name})"
+                for app_name, info in sorted(SAFE_AUTOMATION_APPS.items())
+            )
+            raise ToolValidationError(
+                f"Argument '{name}' of '{tool}' must be one of the applications "
+                f"SIRIUS can launch: {allowed}."
+            )
+        return identifier
+
     raise ToolValidationError(f"Argument '{name}' of '{tool}' has an unknown type.")
+
+
+def _coerce_url(tool, name, url):
+    """Accept only well-formed absolute http(s) URLs; reject everything else."""
+    if not url:
+        raise ToolValidationError(f"Argument '{name}' of '{tool}' must not be empty.")
+    if any(character.isspace() for character in url):
+        raise ToolValidationError(
+            f"Argument '{name}' of '{tool}' must be a URL without whitespace."
+        )
+    try:
+        parts = urlsplit(url)
+    except ValueError as error:
+        raise ToolValidationError(
+            f"Argument '{name}' of '{tool}' must be a well-formed URL."
+        ) from error
+    if parts.scheme.lower() not in ALLOWED_URL_SCHEMES:
+        allowed = " or ".join(f"{scheme}://" for scheme in ALLOWED_URL_SCHEMES)
+        raise ToolValidationError(
+            f"Argument '{name}' of '{tool}' must be an {allowed} URL; "
+            "other URL schemes are not allowed."
+        )
+    if not parts.netloc:
+        raise ToolValidationError(
+            f"Argument '{name}' of '{tool}' must be an absolute URL that "
+            "includes a host."
+        )
+    return url
